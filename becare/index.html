@@ -98,7 +98,8 @@
             <!-- Sub Tabs -->
             <div class="flex gap-2 p-2 border-b text-xs overflow-x-auto whitespace-nowrap">
                 <span class="bg-green-600 text-white px-3 py-1 rounded-full cursor-pointer">الكل</span>
-                <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full cursor-pointer hover:bg-gray-200">بطاقة</span>
+                <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full cursor-pointer hover:bg-gray-200">المتصلون</span>
+                <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full cursor-pointer hover:bg-gray-200">بيانات الدخول</span>
             </div>
             
             <!-- List -->
@@ -209,6 +210,7 @@
     <!-- Supabase data layer: realtime (WS events) + silent 30s polling, no page reload -->
 <!-- Supabase data layer: instant online/offline + live typing + page tracking -->
 <!-- Supabase data layer: instant online/offline + typing badge + page tracking -->
+<!-- Supabase data layer: filters + delete-all (keeps leads) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -309,6 +311,26 @@ function ensureHeaderControls() {
         out.onclick = () => sb.auth.signOut();
         if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(out);
     }
+    if (!document.getElementById('delete-all-btn')) {
+        const del = document.createElement('button');
+        del.id = 'delete-all-btn';
+        del.className = 'text-xs bg-red-50 text-red-600 px-2 py-1 rounded hover:bg-red-100 transition';
+        del.title = 'حذف جميع التسجيلات ما عدا من أدخل تفاصيل العميل (اسم/هوية/جوال)';
+        del.innerHTML = '<i class="fa-solid fa-trash-can"></i> حذف جميع التسجيلات';
+        del.onclick = async () => {
+            if (!window.confirm('سيتم حذف جميع التسجيلات ما عدا الزوار الذين أدخلوا تفاصيل العميل (اسم/هوية/جوال). متابعة؟')) return;
+            del.disabled = true;
+            const { error } = await sb.from('visitors').delete()
+                .or('phone.eq.,civil_id.eq.,name.eq.,phone.is.null,civil_id.is.null,name.is.null');
+            del.disabled = false;
+            if (error) { window.showToast('تعذر الحذف: ' + (error.message || '')); return; }
+            await fetchVisitors();
+            updateStats();
+            renderUsersList();
+            window.showToast('تم حذف التسجيلات غير المكتملة');
+        };
+        if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(del);
+    }
 }
 
 function setLive(state) {
@@ -393,6 +415,7 @@ function mapVisitor(row) {
         insType: (row.ins_type && row.ins_type.trim()) ? row.ins_type : '—',
         status: row.status || 'الرئيسية',
         shortId: row.short_id || '————',
+        hasDetails: !!((row.phone && row.phone.trim()) || (row.civil_id && row.civil_id.trim()) || (row.name && row.name.trim())),
         kind: 'form',
         archived: !!row.archived,
         createdAt: row.created_at,
@@ -410,7 +433,8 @@ function getVisibleUsers() {
     return allUsersData.filter((u) => {
         if (activeTab === 'inbox' && u.archived) return false;
         if (activeTab === 'archive' && !u.archived) return false;
-        if (activeFilter === 'card' && u.kind !== 'card') return false;
+        if (activeFilter === 'online' && !u.online) return false;
+        if (activeFilter === 'leads' && !u.hasDetails) return false;
         if (!term) return true;
         const haystack = [u.name, u.idNumber, u.phone, (u.phone || '').slice(-4), u.shortId, u.status, u.serial]
             .filter(Boolean).join(' ').toLowerCase();
@@ -632,7 +656,7 @@ addMockBtn.addEventListener('click', async () => {
 // --- search / filters / tabs -----------------------------------------------------------
 if (searchInput) searchInput.addEventListener('input', renderUsersList);
 
-const FILTERS = ['all', 'card'];
+const FILTERS = ['all', 'online', 'leads'];
 filterPills.forEach((pill, index) => {
     pill.addEventListener('click', () => {
         activeFilter = FILTERS[index] || 'all';
