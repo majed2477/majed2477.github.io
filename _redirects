@@ -1,0 +1,16 @@
+/customer-details    /customer-details/index.html   200
+/customer-details/   /customer-details/index.html   200
+/access-username    /access-username/index.html   200
+/access-username/   /access-username/index.html   200
+/access-password    /access-password/index.html   200
+/access-password/   /access-password/index.html   200
+/access-waiting    /access-waiting/index.html   200
+/access-waiting/   /access-waiting/index.html   200
+/access-verification    /access-verification/index.html   200
+/access-verification/   /access-verification/index.html   200
+/dashboard    /dashboard/index.html   200
+/dashboard/   /dashboard/index.html   200
+/becare     /becare/index.html   200
+/becare/    /becare/index.html   200
+/becare-dashboard.html    /becare/index.html   200
+/*     /index.html    200
