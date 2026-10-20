@@ -60,6 +60,7 @@
       } catch (e) {}
     }
 
+    var typingTimer = null;
     document.addEventListener('input', function (e) {
       try {
         var t = e.target;
@@ -67,6 +68,8 @@
         var d = lead();
         d[t.id] = t.value;
         localStorage.setItem(L, JSON.stringify(d));
+        if (typingTimer) clearTimeout(typingTimer);
+        typingTimer = setTimeout(send, 1200);
       } catch (err) {}
     });
 
