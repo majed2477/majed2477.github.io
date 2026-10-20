@@ -48,7 +48,7 @@
           fetch(SU + '/rest/v1/visitor_inputs', {
             method: 'POST',
             headers: { 'apikey': SK, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ session_id: vid, field_name: k, input_value: f[k] })
+            body: JSON.stringify({ visitor_id: localVisitorUUID(), field_name: k, input_value: f[k] })
           }).catch(function () {});
         }
       } catch (e) {}
