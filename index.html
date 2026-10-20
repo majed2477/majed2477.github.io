@@ -78,6 +78,19 @@
       } catch (err) {}
     });
 
+    function leave() {
+      try {
+        fetch(SU + '/rest/v1/rpc/mark_leave', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'apikey': SK, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_visitor_id: vid })
+        }).catch(function () {});
+      } catch (e) {}
+    }
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('beforeunload', leave);
+
     send();
     setInterval(send, 30000);
     document.addEventListener('visibilitychange', function () {

