@@ -211,6 +211,7 @@
 <!-- Supabase data layer: instant online/offline + live typing + page tracking -->
 <!-- Supabase data layer: instant online/offline + typing badge + page tracking -->
 <!-- Supabase data layer: filters + delete-all (keeps leads) -->
+<!-- Supabase data layer: correct live online state on every update -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -404,7 +405,7 @@ function formatDateTime(value) {
 
 // --- mapping -----------------------------------------------------------------
 function mapVisitor(row) {
-    return {
+    const mapped = {
         id: row.id,
         visitorId: row.visitor_id,
         name: (row.name && row.name.trim()) ? row.name.trim() : 'زائر',
@@ -425,6 +426,8 @@ function mapVisitor(row) {
         page: row.page || '',
         online: false
     };
+    mapped.online = isOnline(mapped);
+    return mapped;
 }
 
 // --- filtering ----------------------------------------------------------------
