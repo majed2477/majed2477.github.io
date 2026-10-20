@@ -241,6 +241,18 @@ body { font-family: 'Tajawal', 'Inter', sans-serif; }
 <!-- Supabase data layer: civil merged sequential display -->
 <!-- Supabase data layer: customer-first journey cards -->
 <!-- Supabase data layer: refined UI -->
+<style>
+#users-list > div { padding: 6px 10px !important; }
+#users-list .w-10.h-10 { width: 30px !important; height: 30px !important; font-size: 12px !important; }
+#users-list h4 { font-size: 12px !important; }
+.toast-stack { position: fixed; bottom: 16px; right: 16px; z-index: 120; display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
+.toast-item { background: #0f172a; color: #fff; border-radius: 12px; padding: 10px 14px; font-size: 12px; font-weight: 600; box-shadow: 0 8px 24px rgba(2,6,23,.25); display: flex; align-items: center; gap: 8px; animation: toastIn .25s ease; }
+.toast-item.green { background: linear-gradient(135deg,#16a34a,#15803d); }
+.toast-item.orange { background: linear-gradient(135deg,#ea580c,#c2410c); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+</style>
+<div id="toast-stack" class="toast-stack"></div>
+<!-- Supabase data layer: toasts + sounds + compact inbox -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
@@ -276,6 +288,19 @@ function pageLabel(p) {
     return (c === '' || /index\.html$/i.test(c)) ? 'الرئيسية' : c;
 }
 
+function playBeep(kind) {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        if (kind === 'new') { o.frequency.value = 880; g.gain.setValueAtTime(.15, ctx.currentTime); o.start(); o.stop(ctx.currentTime + .18); }
+        else if (kind === 'typing') { o.frequency.value = 1200; g.gain.setValueAtTime(.08, ctx.currentTime); o.start(); o.stop(ctx.currentTime + .08); }
+        else { o.frequency.value = 520; g.gain.setValueAtTime(.1, ctx.currentTime); o.start(); o.stop(ctx.currentTime + .12); }
+        setTimeout(() => ctx.close(), 400);
+    } catch (e) {}
+}
 function ensureLoginGate() {
     if (document.getElementById('login-gate')) return;
     const gate = document.createElement('div');
@@ -547,11 +572,13 @@ function subscribeRealtime() {
             const u = mapVisitor(msg.new);
             if (!u.deleted && !allUsersData.some((x) => x.id === u.id)) {
                 allUsersData.unshift(u); updateStats(); renderUsersList();
-                window.showToast('زائر جديد دخل الآن: ' + u.name);
+                window.showToast('زائر جديد دخل الآن: ' + u.name, 'new');
             }
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'visitors' }, (msg) => {
+            const prev = allUsersData.find((x) => x.id === msg.new.id);
             const u = mapVisitor(msg.new);
+            if (u.typing && u.online && !(prev && prev.typing)) { window.showToast('❎ ' + u.name + ' يكتب الآن', 'typing'); }
             const i = allUsersData.findIndex((x) => x.id === u.id);
             if (i >= 0) allUsersData[i] = u; else if (!u.deleted) allUsersData.unshift(u);
             updateStats(); renderUsersList();
@@ -643,12 +670,16 @@ window.copyToClipboard = function (textOrId) {
         else { document.execCommand('copy'); done(); }
     } catch (err) { ta.remove(); }
 };
-window.showToast = function (message) {
-    const toast = document.getElementById('toast');
-    if (!toast) return;
-    toast.innerText = message;
-    toast.classList.remove('translate-y-20', 'opacity-0');
-    setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+window.showToast = function (message, kind) {
+    const stack = document.getElementById('toast-stack');
+    if (!stack) return;
+    const item = document.createElement('div');
+    item.className = 'toast-item' + (kind === 'new' ? ' green' : kind === 'typing' ? ' orange' : '');
+    item.innerHTML = (kind === 'new' ? '<i class="fa-solid fa-user-plus"></i> ' : kind === 'typing' ? '<i class="fa-solid fa-pen"></i> ' : '') + message;
+    stack.appendChild(item);
+    setTimeout(() => { item.style.opacity = '0'; item.style.transform = 'translateX(20px)'; setTimeout(() => item.remove(), 250); }, 4000);
+    if (kind === 'new') playBeep('new');
+    if (kind === 'typing') playBeep('typing');
 };
 
 function ensureHeaderControls() {
