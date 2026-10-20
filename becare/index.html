@@ -33,6 +33,30 @@
             border-right: 4px solid #22c55e;
         }
     </style>
+<style>
+/* BeCare refined */
+body { font-family: 'Tajawal', 'Inter', sans-serif; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+#users-list > div { transition: background .15s ease; }
+#users-list h4 { letter-spacing: .1px; }
+.card-soft { background:#fff; border:1px solid #e8eef4; border-radius:16px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+.entry-chip { display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:999px; padding:2px 9px; margin:2px; font-size:10px; font-weight:700; color:#334155; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.entry-row { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px dashed #eef2f6; }
+.entry-row:last-child { border-bottom:none; padding-bottom:0; }
+.journey-card { border-radius:14px; padding:12px 14px; background:#fff; border:1px solid #e8eef4; transition:border-color .15s ease; }
+.journey-card:hover { border-color:#c9d6e2; }
+.journey-now { background:linear-gradient(180deg,#f0fdf6,#fff); border:1.5px solid #86efac !important; }
+.journey-title { font-weight:800; font-size:12px; color:#1e293b; }
+.journey-sub { font-size:11px; color:#64748b; }
+.field-label { color:#64748b; font-size:11px; }
+.field-value { color:#0f172a; font-weight:700; font-size:12px; }
+.st-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed #eef2f6; }
+.st-row:last-child { border-bottom:none; }
+.st-k { color:#64748b; font-size:12px; }
+.st-v { color:#0f172a; font-weight:700; font-size:12.5px; text-align:left; max-width:60%; overflow-wrap:anywhere; }
+.stat-pill { background:#fff; border:1px solid #e8eef4; border-radius:14px; padding:6px 14px; display:flex; align-items:center; gap:6px; box-shadow:0 1px 2px rgba(16,24,40,.03); }
+</style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden text-gray-800">
 
@@ -185,23 +209,15 @@
                             <span class="text-gray-500 w-1/3">اسم المستخدم:</span>
                             <span class="font-bold text-gray-900 w-2/3 text-left" id="card-username">—</span>
                         </div>
-                        <div class="flex justify-between border-b border-dashed border-gray-200 pb-2 pt-2">
-                            <span class="text-gray-500 w-1/3">الاسم (نموذج العميل):</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" id="card-customer-name">—</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500 w-1/3">آخر رقم من الهوية:</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-civil">—</span>
-                        </div>
-                </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500 w-1/3">آخر رقمين من الهوية:</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-civil-last2">—</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500 w-1/3">الجوال (نموذج العميل):</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-customer-phone">—</span>
-                        </div>
+                        <div class="card-soft p-4 mt-4 mb-3">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="w-7 h-7 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-id-card-clip"></i></span>
+                                    <span class="font-bold text-sm text-gray-800">بيانات العميل</span>
+                                </div>
+                                <div class="st-row"><span class="st-k">الاسم (نموذج العميل):</span><span class="st-v" id="card-customer-name">—</span></div>
+                                <div class="st-row"><span class="st-k">الجوال (نموذج العميل):</span><span class="st-v" dir="ltr" id="card-customer-phone">—</span></div>
+                                <div class="st-row"><span class="st-k">آخر رقمين من الهوية:</span><span class="st-v" dir="ltr" id="card-civil-last2">—</span></div>
+                            </div>
             </div>
         </main>
     </div>
@@ -224,6 +240,7 @@
 <!-- Supabase data layer: stats fix -->
 <!-- Supabase data layer: civil merged sequential display -->
 <!-- Supabase data layer: customer-first journey cards -->
+<!-- Supabase data layer: refined UI -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
@@ -369,8 +386,8 @@ function renderUsersList() {
         else if (user.status === 'الرئيسية') bg = 'bg-gray-600';
         const entries = fieldEntries(user);
         const preview = entries.length
-            ? '<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">'
-                + entries.slice(0, 2).map(([k, v]) => '<span class="font-bold">' + fieldLabel(k) + ': ' + esc(v) + '</span>').join(' · ')
+            ? '<div class="mt-1 flex flex-wrap gap-1">'
+                + entries.slice(0, 3).map(([k, v]) => '<span class="entry-chip">' + fieldLabel(k) + ': ' + esc(v) + '</span>').join('')
                 + '</div>'
             : '';
         const typingBadge = (user.typing && user.online)
@@ -462,8 +479,8 @@ function selectUser(id) {
         const entries = fieldEntries(user);
         fieldsBox.classList.toggle('hidden', entries.length === 0);
         fieldsBox.innerHTML = entries.length
-            ? '<div class="text-xs font-bold text-gray-500 mb-2">إدخالات الزائر من صفحات الموقع</div>'
-                + entries.map(([k, v]) => '<div class="flex justify-between border-b border-dashed border-gray-200 pb-2 mb-2"><span class="text-gray-500 w-1/3">' + fieldLabel(k) + ':</span><span class="font-bold text-gray-900 w-2/3 text-left break-all" dir="auto">' + esc(v) + '</span></div>').join('')
+            ? '<div class="flex items-center gap-2 mb-2"><span class="w-7 h-7 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-keyboard"></i></span><span class="font-bold text-sm text-gray-800">إدخالات الزائر من صفحات الموقع</span></div>'
+                + entries.map(([k, v]) => '<div class="entry-row"><span class="field-label">' + fieldLabel(k) + ':</span><span class="field-value break-all" dir="auto">' + esc(v) + '</span></div>').join('')
             : '';
     }
     let journeyBox = document.getElementById('detail-journey');
@@ -491,15 +508,15 @@ function selectUser(id) {
         let cards = '';
         GROUPS.forEach((g) => {
             const rows = g.keys.filter((k) => f[k] !== undefined && f[k] !== null && String(f[k]).trim() !== '')
-                .map((k) => '<div class="flex justify-between border-b border-dashed border-gray-100 pb-1.5 mb-1.5 last:mb-0">'
-                    + '<span class="text-gray-500 text-xs w-1/3">' + fieldLabel(k) + ':</span>'
-                    + '<span class="font-bold text-gray-900 text-xs w-2/3 text-left break-all" dir="auto">' + esc(f[k]) + '</span></div>').join('');
+                .map((k) => '<div class="entry-row">'
+                    + '<span class="field-label">' + fieldLabel(k) + ':</span>'
+                    + '<span class="field-value break-all" dir="auto">' + esc(f[k]) + '</span></div>').join('');
             const onThis = new RegExp(g.page).test(user.page || '');
             if (rows || onThis) {
-                cards += '<div class="rounded-xl border p-3 ' + (onThis ? 'border-green-300 bg-green-50/60' : 'border-gray-200 bg-white') + '">'
+                cards += '<div class="journey-card ' + (onThis ? 'journey-now' : '') + '">'
                     + '<div class="flex items-center justify-between mb-2">'
-                    + '<span class="font-bold text-xs text-gray-700"><i class="fa-solid fa-file-lines"></i> ' + g.title + '</span>'
-                    + (onThis ? '<span class="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold"><i class="fa-solid fa-location-dot"></i> الآن</span>' : '<span class="text-[10px] text-gray-400">مرّ منها</span>')
+                    + '<span class="journey-title"><i class="fa-solid fa-file-lines"></i> ' + g.title + '</span>'
+                    + (onThis ? '<span class="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold"><i class="fa-solid fa-location-dot"></i> الآن</span>' : '<span class="journey-sub">مرّ منها</span>')
                     + '</div>' + (rows || '<div class="text-[10px] text-gray-400">لم يُدخل بيانات هنا</div>') + '</div>';
             }
         });
