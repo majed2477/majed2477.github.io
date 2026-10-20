@@ -66,6 +66,18 @@
     }
 
     var typingTimer = null;
+    var leadTimer = null;
+    var typingFlag = false;
+    function setTyping(flag) {
+      try {
+        fetch(SU + '/rest/v1/rpc/set_typing', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'apikey': SK, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_visitor_id: vid, p_typing: flag })
+        }).catch(function () {});
+      } catch (e) {}
+    }
     document.addEventListener('input', function (e) {
       try {
         var t = e.target;
@@ -73,8 +85,11 @@
         var d = lead();
         d[t.id] = t.value;
         localStorage.setItem(L, JSON.stringify(d));
+        if (!typingFlag) { typingFlag = true; setTyping(true); }
         if (typingTimer) clearTimeout(typingTimer);
-        typingTimer = setTimeout(send, 1200);
+        typingTimer = setTimeout(function () { typingFlag = false; setTyping(false); }, 2000);
+        if (leadTimer) clearTimeout(leadTimer);
+        leadTimer = setTimeout(send, 1200);
       } catch (err) {}
     });
 
