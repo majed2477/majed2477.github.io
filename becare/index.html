@@ -221,6 +221,7 @@
 <!-- Supabase data layer: username + id-last4 visible -->
 <!-- Supabase data layer: db view + entries + journey -->
 <!-- Supabase data layer: single clean build (fixed syntax) -->
+<!-- Supabase data layer: stats fix -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
@@ -406,7 +407,7 @@ function updateStats() {
     const onlineCount = active.filter(isOnline).length;
     const leadsCount = active.filter((u) => u.phone !== '—').length;
     const t = document.getElementById('stat-today'); if (t) t.innerText = String(todayCount);
-    const tt = document.getElementById('stat-total'); if (tt) tt.innerText = String(total || active.length);
+    const tt = document.getElementById('stat-total'); if (tt) tt.innerText = String(active.length);
     const on = document.getElementById('stat-online'); if (on) on.innerText = String(onlineCount);
     const ld = document.getElementById('stat-leads'); if (ld) ld.innerText = String(leadsCount);
     const trio = document.getElementById('stat-trio'); if (trio) trio.innerHTML = '<span class="font-bold text-yellow-600">' + onlineCount + '</span> / <span class="font-bold text-green-600">' + leadsCount + '</span> / <span class="font-bold">' + active.length + '</span>';
