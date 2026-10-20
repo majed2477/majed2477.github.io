@@ -209,6 +209,7 @@
 <!-- Supabase data layer: complete single clean build -->
 <!-- Supabase data layer: new rotated key + entries in list/details -->
 <!-- Supabase data layer: journey cards + entries -->
+<!-- Supabase data layer: entries preview + journey cards -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -570,6 +571,8 @@ function renderUsersList() {
                     <div class="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1">
                         <i class="fa-solid fa-location-dot"></i> يتواجد في: ${pageLabel(user.page)}
                     </div>
+                        ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join(' · ')}</div>` : ''}
+
                     ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join("·")}</div>` : ''}
                     ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join(' \u00b7 ')}</div>` : ''}
                     ${fieldEntries(user).length ? `<div class="mt-0.5 text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 border" dir="auto">${fieldEntries(user).slice(0, 2).map(([k, v]) => `<span class="font-bold">${fieldLabel(k)}: ${v}</span>`).join(' · ')}</div>` : ''}
