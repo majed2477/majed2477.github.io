@@ -195,7 +195,7 @@
         تم نسخ النص!
     </div>
 
-    <!-- Supabase data layer -->
+    <!-- Supabase data layer: realtime + admin login -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -672,10 +672,14 @@ async function startApp() {
         updateStats();
         renderUsersList();
         subscribeRealtime();
-        setInterval(() => {
-            allUsersData.forEach((u) => { u.online = isOnline(u); });
-            updateStats();
-            renderUsersList();
+        setInterval(async () => {
+            const okf = await fetchVisitors();
+            if (okf) {
+                allUsersData.forEach((u) => { u.online = isOnline(u); });
+                updateStats();
+                renderUsersList();
+                if (selectedUserId) selectUser(selectedUserId);
+            }
         }, 30000);
     }
 }
