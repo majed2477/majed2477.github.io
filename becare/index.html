@@ -212,6 +212,7 @@
 <!-- Supabase data layer: instant online/offline + typing badge + page tracking -->
 <!-- Supabase data layer: filters + delete-all (keeps leads) -->
 <!-- Supabase data layer: correct live online state on every update -->
+<!-- Supabase data layer: trash bin + restore + filters -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -319,19 +320,91 @@ function ensureHeaderControls() {
         del.title = 'حذف جميع التسجيلات ما عدا من أدخل تفاصيل العميل (اسم/هوية/جوال)';
         del.innerHTML = '<i class="fa-solid fa-trash-can"></i> حذف جميع التسجيلات';
         del.onclick = async () => {
-            if (!window.confirm('سيتم حذف جميع التسجيلات ما عدا الزوار الذين أدخلوا تفاصيل العميل (اسم/هوية/جوال). متابعة؟')) return;
+            if (!window.confirm('سيتم نقل جميع التسجيلات إلى السلة ما عدا الزوار الذين أدخلوا تفاصيل العميل (اسم/هوية/جوال). متابعة؟')) return;
             del.disabled = true;
-            const { error } = await sb.from('visitors').delete()
-                .or('phone.eq.,civil_id.eq.,name.eq.,phone.is.null,civil_id.is.null,name.is.null');
+            const { data: moved, error } = await sb.rpc('trash_visitors');
             del.disabled = false;
-            if (error) { window.showToast('تعذر الحذف: ' + (error.message || '')); return; }
+            if (error) { window.showToast('تعذر النقل: ' + (error.message || '')); return; }
             await fetchVisitors();
             updateStats();
             renderUsersList();
-            window.showToast('تم حذف التسجيلات غير المكتملة');
+            window.showToast('نُقل ' + (moved ?? 0) + ' تسجيلًا إلى السلة');
         };
         if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(del);
     }
+    if (!document.getElementById('trash-btn')) {
+        const tb = document.createElement('button');
+        tb.id = 'trash-btn';
+        tb.className = 'text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 transition';
+        tb.title = 'السلة — التسجيلات المحذوفة';
+        tb.innerHTML = '<i class="fa-solid fa-trash-can"></i> السلة (0)';
+        tb.onclick = openTrashModal;
+        if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(tb);
+    }
+}
+
+function openTrashModal() {
+    let m = document.getElementById('trash-modal');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'trash-modal';
+        m.className = 'fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4';
+        m.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b">
+                <h3 class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-trash-can"></i> السلة — التسجيلات المحذوفة</h3>
+                <button id="trash-close" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div id="trash-list" class="flex-1 overflow-y-auto p-3 text-sm"></div>
+            <div class="p-3 border-t flex items-center justify-between gap-2">
+                <button id="restore-all" class="text-xs bg-blue-50 text-blue-600 px-3 py-2 rounded hover:bg-blue-100 font-bold">استعادة الكل</button>
+                <button id="empty-trash" class="text-xs bg-red-50 text-red-600 px-3 py-2 rounded hover:bg-red-100 font-bold">إفراغ السلة نهائيًا</button>
+            </div>
+        </div>`;
+        document.body.appendChild(m);
+        m.querySelector('#trash-close').onclick = () => m.classList.add('hidden');
+        m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
+        m.querySelector('#restore-all').onclick = async () => {
+            await sb.rpc('restore_all_trash');
+            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
+            window.showToast('تمت استعادة جميع التسجيلات');
+        };
+        m.querySelector('#empty-trash').onclick = async () => {
+            if (!window.confirm('حذف نهائي لكل محتويات السلة — لا يمكن التراجع. متابعة؟')) return;
+            const { data: n } = await sb.rpc('empty_trash');
+            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
+            window.showToast('أُفرغت السلة (' + (n ?? 0) + ' تسجيلًا)');
+        };
+    }
+    m.classList.remove('hidden');
+    renderTrashList();
+}
+
+function renderTrashList() {
+    const listEl = document.getElementById('trash-list');
+    if (!listEl) return;
+    const items = allUsersData.filter((u) => u.deleted);
+    if (!items.length) {
+        listEl.innerHTML = '<div class="text-center text-gray-400 text-xs py-8">السلة فارغة</div>';
+        return;
+    }
+    listEl.innerHTML = '';
+    items.forEach((u) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between p-2.5 border-b border-gray-100';
+        row.innerHTML = `<div>
+                <div class="font-bold text-gray-800 text-xs">${u.name}</div>
+                <div class="text-[10px] text-gray-400">${u.phone !== '—' ? u.phone + ' · ' : ''}حُذف ${timeAgo(u.deletedAt)}</div>
+            </div>`;
+        const btn = document.createElement('button');
+        btn.className = 'text-xs bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded hover:bg-blue-100 font-bold';
+        btn.innerText = 'استعادة';
+        btn.onclick = async () => {
+            await sb.rpc('restore_visitor', { p_id: u.id });
+            await fetchVisitors(); updateStats(); renderUsersList(); renderTrashList();
+        };
+        row.appendChild(btn);
+        listEl.appendChild(row);
+    });
 }
 
 function setLive(state) {
@@ -423,6 +496,8 @@ function mapVisitor(row) {
         lastSeen: row.last_seen,
         isOnlineFlag: row.is_online !== false,
         typing: row.is_typing === true,
+        deleted: !!row.deleted_at,
+        deletedAt: row.deleted_at,
         page: row.page || '',
         online: false
     };
@@ -434,6 +509,7 @@ function mapVisitor(row) {
 function getVisibleUsers() {
     const term = (searchInput && searchInput.value ? searchInput.value : '').trim().toLowerCase();
     return allUsersData.filter((u) => {
+        if (u.deleted) return false;
         if (activeTab === 'inbox' && u.archived) return false;
         if (activeTab === 'archive' && !u.archived) return false;
         if (activeFilter === 'online' && !u.online) return false;
@@ -509,13 +585,17 @@ function renderUsersList() {
 }
 
 function updateStats() {
-    const total = allUsersData.length;
-    const todayCount = allUsersData.filter((u) => {
+    const active = allUsersData.filter((u) => !u.deleted);
+    const total = active.length;
+    const trashCount = allUsersData.length - active.length;
+    const trashBtn = document.getElementById('trash-btn');
+    if (trashBtn) trashBtn.innerHTML = `<i class="fa-solid fa-trash-can"></i> السلة (${trashCount})`;
+    const todayCount = active.filter((u) => {
         const d = toDate(u.createdAt);
         return d && (Date.now() - d.getTime()) < 86400000;
     }).length;
-    const onlineCount = allUsersData.filter(isOnline).length;
-    const leadsCount = allUsersData.filter((u) => u.phone !== '—').length;
+    const onlineCount = active.filter(isOnline).length;
+    const leadsCount = active.filter((u) => u.phone !== '—').length;
 
     const todayEl = document.getElementById('stat-today');
     const totalEl = document.getElementById('stat-total');
@@ -530,7 +610,7 @@ function updateStats() {
     if (trioEl) trioEl.innerHTML = `<span class="font-bold text-yellow-600">${onlineCount}</span> / <span class="font-bold text-green-600">${leadsCount}</span> / <span class="font-bold">${total}</span>`;
 
     const inboxTab = tabButtons[0];
-    if (inboxTab) inboxTab.innerText = `صندوق الوارد (${allUsersData.filter(u => !u.archived).length})`;
+    if (inboxTab) inboxTab.innerText = `صندوق الوارد (${active.filter(u => !u.archived).length})`;
 }
 
 // --- details ---------------------------------------------------------------------
