@@ -47,9 +47,6 @@
             <div class="flex items-center gap-2 border-r pr-4">
                 <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center font-bold">A</div>
             </div>
-            <button id="add-mock-user" class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 transition" title="إضافة مستخدم للتجربة">
-                <i class="fa-solid fa-plus"></i> محاكاة زائر جديد
-            </button>
         </div>
 
         <!-- Stats Area -->
@@ -144,7 +141,6 @@
                         <span class="px-2"><i class="fa-brands fa-chrome"></i> Samsung Browser</span>
                     </div>
                     
-                    <span id="detail-online" class="bg-gray-100 text-gray-500 border border-gray-200 text-xs px-3 py-1 rounded">—</span>
                     <span class="bg-red-600 text-white text-xs px-3 py-1 rounded cursor-pointer hover:bg-red-700 transition">
                         حظر <i class="fa-solid fa-ban mr-1"></i>
                     </span>
@@ -207,12 +203,8 @@
         تم نسخ النص!
     </div>
 
-    <!-- Supabase data layer: realtime (WS events) + silent 30s polling, no page reload -->
-<!-- Supabase data layer: instant online/offline + live typing + page tracking -->
-<!-- Supabase data layer: instant online/offline + typing badge + page tracking -->
-<!-- Supabase data layer: filters + delete-all (keeps leads) -->
-<!-- Supabase data layer: correct live online state on every update -->
-<!-- Supabase data layer: trash bin + restore + filters -->
+    <!-- Firebase Implementation -->
+    <!-- Supabase data layer: live state + typing + trash + filters -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -226,7 +218,6 @@ const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_9XuOSJFbIz3mNBAibcPiDw_qUZzvYSf';
 
 const usersListEl = document.getElementById('users-list');
-const addMockBtn = document.getElementById('add-mock-user');
 const noUserSelectedEl = document.getElementById('no-user-selected');
 const userDetailsHeader = document.getElementById('user-details-header');
 const userDetailsContent = document.getElementById('user-details-content');
@@ -302,7 +293,7 @@ function ensureHeaderControls() {
         badge.id = 'live-badge';
         badge.className = 'text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-bold';
         badge.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> جاري الاتصال اللحظي';
-        if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.insertBefore(badge, addMockBtn);
+        headerStatsEl.appendChild(badge);
     }
     if (!document.getElementById('sign-out-btn')) {
         const out = document.createElement('button');
@@ -311,7 +302,7 @@ function ensureHeaderControls() {
         out.title = 'تسجيل الخروج';
         out.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i> خروج';
         out.onclick = () => sb.auth.signOut();
-        if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(out);
+        headerStatsEl.appendChild(out);
     }
     if (!document.getElementById('delete-all-btn')) {
         const del = document.createElement('button');
@@ -330,7 +321,7 @@ function ensureHeaderControls() {
             renderUsersList();
             window.showToast('نُقل ' + (moved ?? 0) + ' تسجيلًا إلى السلة');
         };
-        if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(del);
+        headerStatsEl.appendChild(del);
     }
     if (!document.getElementById('trash-btn')) {
         const tb = document.createElement('button');
@@ -339,7 +330,7 @@ function ensureHeaderControls() {
         tb.title = 'السلة — التسجيلات المحذوفة';
         tb.innerHTML = '<i class="fa-solid fa-trash-can"></i> السلة (0)';
         tb.onclick = openTrashModal;
-        if (addMockBtn && addMockBtn.parentNode) addMockBtn.parentNode.appendChild(tb);
+        headerStatsEl.appendChild(tb);
     }
 }
 
@@ -712,30 +703,6 @@ function subscribeRealtime() {
         });
 }
 
-// --- test visitor (goes through the same Supabase pipeline) ---------------------------
-addMockBtn.addEventListener('click', async () => {
-    const names = ["خالد إبراهيم الأنصاري", "عبدالرحمن فلاح الزبني", "مشعل ممدوح علي", "رائد ناجي حيدرة", "جمال علي"];
-    const randomName = names[Math.floor(Math.random() * names.length)] + ' (اختبار)';
-    addMockBtn.disabled = true;
-    const { error } = await sb.rpc('track_visit', {
-        p_visitor_id: 'test-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-        p_page: '/test',
-        p_status: 'OTP',
-        p_referrer: '',
-        p_user_agent: navigator.userAgent,
-        p_device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-        p_name: randomName,
-        p_civil_id: null,
-        p_phone: null
-    });
-    addMockBtn.disabled = false;
-    if (error) {
-        window.showToast('تعذر الإرسال: ' + (error.message || 'خطأ'));
-    } else {
-        window.showToast('أُرسل زائر اختباري عبر Supabase — سيظهر لحظيًا');
-    }
-});
-
 // --- search / filters / tabs -----------------------------------------------------------
 if (searchInput) searchInput.addEventListener('input', renderUsersList);
 
@@ -823,8 +790,8 @@ async function startApp() {
     if (appStarted) return;
     appStarted = true;
     hideLogin();
-    ensureHeaderControls();
     renderIdleStats();
+    ensureHeaderControls();
     const ok = await fetchVisitors();
     if (ok) {
         updateStats();
