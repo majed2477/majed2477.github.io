@@ -193,6 +193,14 @@
                             <span class="font-bold text-gray-900 w-2/3 text-left" id="card-instype">تأمين جديد</span>
                         </div>
                     </div>
+                        <div class="flex justify-between border-b border-dashed border-gray-200 pb-2 pt-2">
+                            <span class="text-gray-500 w-1/3">اسم المستخدم:</span>
+                            <span class="font-bold text-gray-900 w-2/3 text-left" id="card-username">—</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500 w-1/3">آخر رقم من الهوية:</span>
+                            <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-civil">—</span>
+                        </div>
                 </div>
             </div>
         </main>
@@ -210,6 +218,7 @@
 <!-- Supabase data layer: new rotated key + entries in list/details -->
 <!-- Supabase data layer: journey cards + entries -->
 <!-- Supabase data layer: entries preview + journey cards -->
+<!-- Supabase data layer: username + id-last4 visible -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -502,6 +511,10 @@ function mapVisitor(row) {
         page: row.page || '',
         online: false
     };
+    const F = mapped.fields || {};
+    mapped.username = F['demo-username'] || F['username'] || '';
+    const civilRaw = ((F['demo-civil-1'] || '') + (F['demo-civil-2'] || '') + (F['civilId'] || '') + (row.civil_id || '')).replace(/\D/g, '');
+    mapped.civilDisplay = civilRaw ? (civilRaw.length > 4 ? '\u2022\u2022\u2022\u2022' + civilRaw.slice(-4) : civilRaw) : '\u2014';
     mapped.online = isOnline(mapped);
     return mapped;
 }
@@ -665,6 +678,10 @@ function selectUser(id) {
     document.getElementById('card-doctype').innerText = user.docType || '—';
     document.getElementById('card-serial').innerText = user.serial || '—';
     document.getElementById('card-instype').innerText = user.insType || '—';
+    const cuEl = document.getElementById('card-username');
+    if (cuEl) cuEl.innerText = user.username || '—';
+    const ccEl = document.getElementById('card-civil');
+    if (ccEl) ccEl.innerText = user.civilDisplay;
 
 
     let journeyBox = document.getElementById('detail-journey');
